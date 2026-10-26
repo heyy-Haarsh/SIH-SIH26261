@@ -2,8 +2,12 @@ import type {
   ApiHealth,
   ApplicationDetail,
   ApplicationSummary,
+  DeficiencyNotice,
   Discrepancy,
   ExtractionRun,
+  Finding,
+  ForensicsIndicator,
+  ForensicsRun,
   ReconciliationRun,
 } from '@/types'
 
@@ -144,6 +148,104 @@ export const api = {
     body: { status: string; reason: string },
   ) =>
     request<Discrepancy>(`/reconciliation-items/${itemId}/resolve`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  runForensics: (role: string, applicationId: string) =>
+    request<ForensicsRun>(`/applications/${applicationId}/forensics-runs`, {
+      method: 'POST',
+      role,
+    }),
+
+  latestForensics: (role: string, applicationId: string) =>
+    request<ForensicsRun | null>(`/applications/${applicationId}/forensics-runs/latest`, { role }),
+
+  listForensicsIndicators: (role: string, applicationId: string) =>
+    request<ForensicsIndicator[]>(`/applications/${applicationId}/forensics-indicators`, { role }),
+
+  resolveForensicsIndicator: (
+    role: string,
+    indicatorId: string,
+    body: { status: string; reason: string },
+  ) =>
+    request<ForensicsIndicator>(`/forensics-indicators/${indicatorId}/resolve`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  startScrutiny: (role: string, applicationId: string) =>
+    request<ApplicationDetail>(`/applications/${applicationId}/scrutiny/start`, {
+      method: 'POST',
+      role,
+    }),
+
+  requestClarification: (
+    role: string,
+    applicationId: string,
+    body: { title: string; description: string; finding_ids?: string[] },
+  ) =>
+    request<ApplicationDetail>(`/applications/${applicationId}/scrutiny/clarification`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  recordDecision: (
+    role: string,
+    applicationId: string,
+    body: { reason: string; recommend: boolean },
+  ) =>
+    request<ApplicationDetail>(`/applications/${applicationId}/scrutiny/decision`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  addReviewNote: (role: string, applicationId: string, content: string) =>
+    request<ApplicationDetail>(`/applications/${applicationId}/scrutiny/notes`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }),
+
+  resubmitApplication: (role: string, applicationId: string, note = '') =>
+    request<ApplicationDetail>(`/applications/${applicationId}/resubmit`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    }),
+
+  refreshScrutinySummary: (role: string, applicationId: string) =>
+    request<ApplicationDetail>(`/applications/${applicationId}/scrutiny/refresh-summary`, {
+      method: 'POST',
+      role,
+    }),
+
+  listDeficiencies: (role: string, applicationId?: string) =>
+    request<DeficiencyNotice[]>(
+      applicationId ? `/applications/${applicationId}/deficiencies` : '/deficiencies',
+      { role },
+    ),
+
+  respondDeficiency: (role: string, deficiencyId: string, response: string) =>
+    request<DeficiencyNotice>(`/deficiencies/${deficiencyId}/respond`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response }),
+    }),
+
+  resolveFinding: (role: string, findingId: string, body: { status: string; reason: string }) =>
+    request<Finding>(`/findings/${findingId}/resolve`, {
       method: 'POST',
       role,
       headers: { 'Content-Type': 'application/json' },

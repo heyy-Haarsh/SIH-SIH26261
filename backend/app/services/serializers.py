@@ -9,23 +9,28 @@ from app.models.enums import FindingSeverity
 from app.models.review import DeficiencyNotice, ReviewDecision
 from app.models.validation import Finding
 from app.models.verification import VerificationRequest
+from app.models.enums import DeficiencyStatus
 from app.schemas.common import (
     ApplicationDetailOut,
     ApplicationSummaryOut,
     AuditEventOut,
+    DeficiencyOut,
     DiscrepancyOut,
     DocumentOut,
     DocumentRequirementOut,
     EvidenceOut,
     ExtractedFieldOut,
     FindingOut,
+    ForensicsEvidenceOut,
+    ForensicsIndicatorOut,
+    ForensicsRunOut,
     ReconciliationRunOut,
     ReconciliationValueOut,
     ReviewNoteOut,
     VerificationOut,
 )
 from app.core.seed import DEFAULT_DOCS
-from app.services import reconciliation_service
+from app.services import forensics_service, reconciliation_service
 
 
 def _enum_val(v) -> str:
@@ -79,6 +84,56 @@ def reconciliation_run_to_out(run) -> ReconciliationRunOut:
     )
 
 
+def forensics_evidence_to_out(e) -> ForensicsEvidenceOut:
+    return ForensicsEvidenceOut(
+        id=e.id,
+        description=e.description,
+        document_id=e.document_id,
+        document_name=e.document_name,
+        page_number=e.page_number,
+        page_reference=e.page_reference,
+        detail=e.detail,
+    )
+
+
+def forensics_indicator_to_out(item) -> ForensicsIndicatorOut:
+    return ForensicsIndicatorOut(
+        id=item.id,
+        document_id=item.document_id,
+        code=_enum_val(item.code),
+        risk_class=_enum_val(item.risk_class),
+        original_risk_class=_enum_val(item.original_risk_class),
+        severity=_enum_val(item.severity),
+        status=_enum_val(item.status),
+        verification_status=_enum_val(item.verification_status),
+        title=item.title,
+        description=item.description,
+        affected_pages=list(item.affected_pages or []),
+        evidence=[forensics_evidence_to_out(e) for e in item.evidence],
+        metadata=dict(item.indicator_metadata or {}),
+        resolution_reason=item.resolution_reason,
+        resolved_at=item.resolved_at,
+        fingerprint=item.fingerprint,
+    )
+
+
+def forensics_run_to_out(run) -> ForensicsRunOut:
+    return ForensicsRunOut(
+        id=run.id,
+        application_id=run.application_id,
+        validation_run_id=run.validation_run_id,
+        status=_enum_val(run.status),
+        trigger=run.trigger,
+        engine_version=run.engine_version,
+        input_fingerprint=run.input_fingerprint,
+        summary=run.summary or {},
+        limitations=list(run.limitations or []),
+        indicators=[forensics_indicator_to_out(i) for i in (run.indicators or [])],
+        created_at=run.created_at,
+        completed_at=run.completed_at,
+    )
+
+
 def finding_to_out(f: Finding) -> FindingOut:
     return FindingOut(
         id=f.id,
@@ -107,9 +162,31 @@ def finding_to_out(f: Finding) -> FindingOut:
     )
 
 
+def deficiency_to_out(n: DeficiencyNotice, application_number: str | None = None) -> DeficiencyOut:
+    return DeficiencyOut(
+        id=n.id,
+        application_id=n.application_id,
+        application_number=application_number,
+        title=n.title,
+        description=n.description,
+        status=_enum_val(n.status),
+        finding_id=n.finding_id,
+        due_date=n.due_date,
+        applicant_response=n.applicant_response,
+        responded_at=n.responded_at,
+        created_at=n.created_at,
+        resolved_at=n.resolved_at,
+    )
+
+
 def application_summary(db: Session, app: Application) -> ApplicationSummaryOut:
     deficiency_count = (
-        db.query(DeficiencyNotice).filter(DeficiencyNotice.application_id == app.id).count()
+        db.query(DeficiencyNotice)
+        .filter(
+            DeficiencyNotice.application_id == app.id,
+            DeficiencyNotice.status == DeficiencyStatus.OPEN,
+        )
+        .count()
     )
     officer_name = app.assigned_officer.name if app.assigned_officer else None
     return ApplicationSummaryOut(
@@ -126,6 +203,7 @@ def application_summary(db: Session, app: Application) -> ApplicationSummaryOut:
         finding_count=app.finding_count,
         requires_manual_review=app.requires_manual_review,
         priority_score=app.priority_score,
+        score_config_version=app.score_config_version,
         assigned_officer=officer_name,
     )
 
@@ -259,6 +337,13 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
     )
 
     summary = application_summary(db, app)
+    latest_forensics = forensics_service.get_latest_run(db, app.id)
+    deficiencies = (
+        db.query(DeficiencyNotice)
+        .filter(DeficiencyNotice.application_id == app.id)
+        .order_by(DeficiencyNotice.created_at.desc())
+        .all()
+    )
     return ApplicationDetailOut(
         **summary.model_dump(),
         academic_year=app.academic_year,
@@ -272,6 +357,16 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
             reconciliation_item_to_out(i)
             for i in reconciliation_service.list_open_items_for_application(db, app.id)
         ],
+        forensics_indicators=[
+            forensics_indicator_to_out(i)
+            for i in forensics_service.list_open_indicators(db, app.id)
+        ],
+        forensics_limitations=list((latest_forensics.limitations or []) if latest_forensics else []),
+        deficiencies=[deficiency_to_out(n, app.application_number) for n in deficiencies],
+        score_breakdown=dict(app.score_breakdown or {}),
+        scrutiny_summary=dict(app.scrutiny_summary or {}),
+        last_transition_at=app.last_transition_at,
+        last_transition_note=app.last_transition_note,
         verifications=[
             VerificationOut(
                 id=v.id,

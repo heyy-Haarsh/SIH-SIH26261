@@ -1,5 +1,7 @@
 import { Bell, ChevronDown, Menu } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useRole } from '@/app/RoleContext'
+import { ROLE_HOME } from '@/lib/nav'
 import type { UserRole } from '@/types'
 import { Badge } from '@/components/ui/Badge'
 import { Select } from '@/components/ui/Input'
@@ -20,6 +22,13 @@ export function TopBar({
   onMenuClick?: () => void
 }) {
   const { role, user, setRole } = useRole()
+  const navigate = useNavigate()
+
+  function onRoleChange(next: UserRole) {
+    setRole(next)
+    // Role-prefixed routes stay mounted; navigate home so the active workspace updates immediately.
+    navigate(ROLE_HOME[next], { replace: true })
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4 md:px-6">
@@ -59,7 +68,7 @@ export function TopBar({
           <Select
             aria-label="Demo role switcher"
             value={role}
-            onChange={(e) => setRole(e.target.value as UserRole)}
+            onChange={(e) => onRoleChange(e.target.value as UserRole)}
           >
             <option value="officer">Scrutiny Officer</option>
             <option value="applicant">Applicant</option>

@@ -47,5 +47,7 @@ class DeficiencyNotice(Base):
         enum_type(DeficiencyStatus), index=True, default=DeficiencyStatus.OPEN, nullable=False
     )
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    applicant_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    responded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)

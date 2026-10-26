@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import admin, applications, extraction, health, reconciliation
+from app.api.routes import admin, applications, extraction, forensics, health, reconciliation, workflow
 from app.core.config import get_settings
 from app.core.database import SessionLocal, init_db
 from app.core.errors import register_exception_handlers
@@ -50,6 +50,8 @@ def create_app() -> FastAPI:
     application.include_router(applications.router, prefix="/api/v1")
     application.include_router(extraction.router, prefix="/api/v1")
     application.include_router(reconciliation.router, prefix="/api/v1")
+    application.include_router(forensics.router, prefix="/api/v1")
+    application.include_router(workflow.router, prefix="/api/v1")
     application.include_router(admin.router, prefix="/api/v1")
     register_exception_handlers(application)
 

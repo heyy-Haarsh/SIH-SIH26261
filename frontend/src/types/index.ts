@@ -3,13 +3,18 @@ export type UserRole = 'applicant' | 'officer' | 'admin'
 export type ApplicationStatus =
   | 'draft'
   | 'submitted'
+  | 'processing'
+  | 'under_scrutiny'
+  | 'clarification_required'
+  | 'resubmitted'
+  | 'recommended'
+  | 'rejected'
+  // Legacy statuses still returned by older rows
   | 'awaiting_review'
   | 'under_review'
   | 'deficiency'
   | 'manual_review'
   | 'approved'
-  | 'rejected'
-  | 'resubmitted'
 
 export type FindingSeverity = 'info' | 'warning' | 'failed' | 'manual_review'
 export type FindingStatus = 'open' | 'resolved' | 'waived' | 'accepted'
@@ -68,9 +73,33 @@ export interface ApplicationSummary {
   deficiencyCount: number
   findingCount: number
   requiresManualReview: boolean
-  /** Demo prioritization aid — not proof of fraud or compliance */
+  /** Prioritization aid only — not proof of fraud or an automatic rejection */
   priorityScore?: number
+  scoreConfigVersion?: string | null
   assignedOfficer?: string
+}
+
+export interface DeficiencyNotice {
+  id: string
+  applicationId: string
+  applicationNumber?: string | null
+  title: string
+  description: string
+  status: 'open' | 'responded' | 'closed'
+  findingId?: string | null
+  applicantResponse?: string | null
+  respondedAt?: string | null
+  createdAt: string
+  resolvedAt?: string | null
+}
+
+export interface ScoreContribution {
+  source: string
+  label: string
+  weightKey: string
+  points: number
+  refId?: string | null
+  detail?: string
 }
 
 export interface DocumentRequirement {
@@ -228,6 +257,57 @@ export interface VerificationResult {
   checkedAt: string | null
 }
 
+export type ForensicsRiskClass =
+  | 'informational'
+  | 'check_limitation'
+  | 'technical_anomaly'
+  | 'authenticity_concern'
+  | 'possible_duplicate'
+
+export interface ForensicsEvidence {
+  id: string
+  description: string
+  documentId?: string | null
+  documentName?: string | null
+  pageNumber?: number | null
+  pageReference?: string | null
+  detail?: string | null
+}
+
+export interface ForensicsIndicator {
+  id: string
+  documentId?: string | null
+  code: string
+  riskClass: ForensicsRiskClass
+  originalRiskClass?: ForensicsRiskClass | null
+  severity: FindingSeverity
+  status: FindingStatus | 'cleared'
+  verificationStatus: VerificationStatus
+  title: string
+  description: string
+  affectedPages: number[]
+  evidence: ForensicsEvidence[]
+  metadata?: Record<string, unknown>
+  resolutionReason?: string | null
+  resolvedAt?: string | null
+  fingerprint?: string | null
+}
+
+export interface ForensicsRun {
+  id: string
+  applicationId: string
+  validationRunId?: string | null
+  status: string
+  trigger: string
+  engineVersion: string
+  inputFingerprint: string
+  summary: Record<string, unknown>
+  limitations: string[]
+  indicators: ForensicsIndicator[]
+  createdAt: string
+  completedAt?: string | null
+}
+
 export interface ReviewNote {
   id: string
   author: string
@@ -253,11 +333,26 @@ export interface ApplicationDetail extends ApplicationSummary {
   extractedFields: ExtractedField[]
   findings: Finding[]
   discrepancies: Discrepancy[]
+  forensicsIndicators: ForensicsIndicator[]
+  forensicsLimitations: string[]
+  deficiencies: DeficiencyNotice[]
   verifications: VerificationResult[]
   reviewNotes: ReviewNote[]
   auditEvents: AuditEvent[]
   validationRunId?: string
   validationRunStatus?: string
+  scoreBreakdown?: {
+    score?: number
+    configVersion?: string
+    weights?: Record<string, number>
+    contributions?: ScoreContribution[]
+    notes?: string[]
+    processingComplete?: boolean
+    disclaimer?: string
+  }
+  scrutinySummary?: Record<string, unknown>
+  lastTransitionAt?: string | null
+  lastTransitionNote?: string | null
 }
 
 export interface ScrutinyStats {

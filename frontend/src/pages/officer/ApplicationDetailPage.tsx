@@ -17,7 +17,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Tabs } from '@/components/ui/Tabs'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Textarea } from '@/components/ui/Input'
+import { Input, Textarea } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import {
   ApplicationStatusBadge,
@@ -46,6 +46,23 @@ function outcomeTone(outcome: string): 'pass' | 'failed' | 'warning' | 'manual' 
   }
 }
 
+function riskTone(risk: string): 'pass' | 'failed' | 'warning' | 'manual' | 'info' | 'neutral' {
+  switch (risk) {
+    case 'informational':
+      return 'info'
+    case 'check_limitation':
+      return 'neutral'
+    case 'technical_anomaly':
+      return 'warning'
+    case 'authenticity_concern':
+      return 'failed'
+    case 'possible_duplicate':
+      return 'manual'
+    default:
+      return 'neutral'
+  }
+}
+
 export function ApplicationDetailPage() {
   const { id } = useParams()
   const { role } = useRole()
@@ -59,6 +76,15 @@ export function ApplicationDetailPage() {
   const [resolveBusy, setResolveBusy] = useState<string | null>(null)
   const [resolveReason, setResolveReason] = useState<Record<string, string>>({})
   const [reconMsg, setReconMsg] = useState<string | null>(null)
+  const [forensicsBusy, setForensicsBusy] = useState(false)
+  const [forensicsMsg, setForensicsMsg] = useState<string | null>(null)
+  const [forensicsResolveBusy, setForensicsResolveBusy] = useState<string | null>(null)
+  const [forensicsReason, setForensicsReason] = useState<Record<string, string>>({})
+  const [workflowBusy, setWorkflowBusy] = useState(false)
+  const [workflowMsg, setWorkflowMsg] = useState<string | null>(null)
+  const [clarifyTitle, setClarifyTitle] = useState('Clarification required')
+  const [clarifyBody, setClarifyBody] = useState('')
+  const [decisionReason, setDecisionReason] = useState('')
   const roleLabel =
     role === 'officer' ? 'Scrutiny Officer' : role === 'applicant' ? 'Applicant' : 'Administrator'
   const listPath = role === 'applicant' ? '/applicant/applications' : '/officer/queue'
@@ -95,31 +121,80 @@ export function ApplicationDetailPage() {
       title={detail.applicationNumber}
       breadcrumbs={[roleLabel, 'Applications', detail.applicationNumber]}
       actions={
-        role === 'officer' ? (
+        role === 'officer' || role === 'admin' ? (
           <>
-            <Button variant="outline" size="sm">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={workflowBusy}
+              onClick={async () => {
+                setWorkflowBusy(true)
+                setWorkflowMsg(null)
+                try {
+                  await api.startScrutiny(role, detail.id)
+                  setWorkflowMsg('Scrutiny started — application under_scrutiny.')
+                  await reload()
+                } catch (err) {
+                  setWorkflowMsg(err instanceof Error ? err.message : 'Start scrutiny failed')
+                } finally {
+                  setWorkflowBusy(false)
+                }
+              }}
+            >
+              Start scrutiny
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={workflowBusy}
+              onClick={() => setTab('review')}
+            >
               Request clarification
             </Button>
-            <Button variant="secondary" size="sm">
-              Issue deficiency
+            <Button size="sm" disabled={workflowBusy} onClick={() => setTab('review')}>
+              Record decision
             </Button>
-            <Button size="sm">Record decision</Button>
           </>
         ) : role === 'applicant' ? (
           <>
-            <Button variant="outline" size="sm">
-              Replace document
+            <Link to="/applicant/uploads">
+              <Button variant="outline" size="sm">
+                Upload / replace document
+              </Button>
+            </Link>
+            <Button
+              size="sm"
+              disabled={workflowBusy}
+              onClick={async () => {
+                setWorkflowBusy(true)
+                setWorkflowMsg(null)
+                try {
+                  await api.resubmitApplication(role, detail.id, 'Resubmitted after corrections')
+                  setWorkflowMsg('Resubmitted — processing re-run; prior history preserved.')
+                  await reload()
+                } catch (err) {
+                  setWorkflowMsg(err instanceof Error ? err.message : 'Resubmit failed')
+                } finally {
+                  setWorkflowBusy(false)
+                }
+              }}
+            >
+              Resubmit
             </Button>
-            <Button size="sm">Resubmit</Button>
           </>
         ) : undefined
       }
     >
       <DemoBanner>
         {source === 'api'
-          ? 'Live API data. Extracted fields and statuses come from the document-intelligence pipeline. Findings may cite synthetic demo rules (SYN-RULE-*) and are not official AICTE determinations.'
-          : 'Synthetic demo data (mock layer). Switch to an API-created application to see real extraction results. Findings cite SYN-RULE-* placeholders — not official AICTE determinations.'}
+          ? 'Live API data. Priority score is an explainable prioritization aid — not fraud proof or auto-rejection. Findings may cite SYN-RULE-* placeholders.'
+          : 'Synthetic demo data (mock layer). Switch to an API-created application for the full scrutiny workflow.'}
       </DemoBanner>
+      {workflowMsg && (
+        <div className="mb-4 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-xs text-ink-secondary">
+          {workflowMsg}
+        </div>
+      )}
 
       <div className="mb-5 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -157,15 +232,32 @@ export function ApplicationDetailPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Validation run" description="Latest deterministic evaluation" />
+          <CardHeader title="Scrutiny summary" description="Explainable prioritization" />
           <div className="space-y-2 text-sm">
-            <Row label="Run ID" value={detail.validationRunId ?? '—'} />
-            <Row label="Status" value={detail.validationRunStatus ?? '—'} />
+            <Row label="Workflow status" value={detail.status.replace(/_/g, ' ')} />
+            <Row label="Validation" value={detail.validationRunStatus ?? '—'} />
             <Row
               label="Manual review"
               value={detail.requiresManualReview ? 'Required' : 'Not required'}
             />
+            <Row
+              label="Last transition"
+              value={detail.lastTransitionNote ?? '—'}
+            />
           </div>
+          {(detail.scoreBreakdown?.contributions?.length ?? 0) > 0 && (
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="mb-1 text-[11px] font-medium text-ink-secondary">Score contributions</div>
+              <ul className="max-h-40 space-y-1 overflow-auto text-[11px] text-ink-muted">
+                {(detail.scoreBreakdown?.contributions ?? []).slice(0, 8).map((c, i) => (
+                  <li key={`${c.weightKey}-${i}`}>
+                    +{c.points} · {c.label}{' '}
+                    <span className="opacity-70">({c.weightKey})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -182,6 +274,16 @@ export function ApplicationDetailPage() {
                 id: 'compare',
                 label: 'Reconciliation',
                 count: detail.discrepancies.filter((d) => d.outcome !== 'MATCH').length,
+              },
+              {
+                id: 'forensics',
+                label: 'Authenticity & Forensics',
+                count: (detail.forensicsIndicators ?? []).filter(
+                  (i) =>
+                    i.riskClass === 'technical_anomaly' ||
+                    i.riskClass === 'authenticity_concern' ||
+                    i.riskClass === 'possible_duplicate',
+                ).length,
               },
               { id: 'verify', label: 'Verification' },
               { id: 'review', label: 'Review & audit' },
@@ -592,6 +694,147 @@ export function ApplicationDetailPage() {
             </div>
           )}
 
+          {tab === 'forensics' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <Shield size={16} /> Authenticity &amp; forensics
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={forensicsBusy}
+                  leftIcon={<RefreshCw size={14} />}
+                  onClick={async () => {
+                    setForensicsBusy(true)
+                    setForensicsMsg(null)
+                    try {
+                      const run = await api.runForensics(role, detail.id)
+                      const counts = (run.summary?.countsByRiskClass as Record<string, number>) || {}
+                      setForensicsMsg(
+                        `Forensics completed — concerns ${counts.authenticity_concern ?? 0}, anomalies ${counts.technical_anomaly ?? 0}, duplicates ${counts.possible_duplicate ?? 0}. Never an automatic fraud label.`,
+                      )
+                      await reload()
+                    } catch (err) {
+                      setForensicsMsg(err instanceof Error ? err.message : 'Forensics failed')
+                    } finally {
+                      setForensicsBusy(false)
+                    }
+                  }}
+                >
+                  {forensicsBusy ? 'Analyzing…' : 'Run forensics'}
+                </Button>
+              </div>
+              <p className="text-xs text-ink-muted">
+                Local PDF metadata/structure/signature heuristics, hash and near-duplicate checks,
+                and labeled external claims. Missing metadata or an unsigned file is a check
+                limitation — not automatic tampering. Simulated checks are labeled as such.
+              </p>
+              {(detail.forensicsLimitations ?? []).length > 0 && (
+                <div className="rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <div className="mb-1 font-medium">Analysis limitations</div>
+                  <ul className="list-disc pl-4">
+                    {(detail.forensicsLimitations ?? []).map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {forensicsMsg && (
+                <div className="rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-xs text-ink-secondary">
+                  {forensicsMsg}
+                </div>
+              )}
+              {(detail.forensicsIndicators ?? []).length === 0 && (
+                <EmptyState
+                  icon={Shield}
+                  title="No forensics indicators yet"
+                  description="Upload documents, then run forensics or validation."
+                />
+              )}
+              {(detail.forensicsIndicators ?? []).map((ind) => (
+                <div key={ind.id} className="rounded-[var(--radius-md)] border border-border p-4">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-ink">{ind.title}</span>
+                    <Badge tone={riskTone(ind.riskClass)}>{ind.riskClass.replace(/_/g, ' ')}</Badge>
+                    <Badge tone="neutral">{ind.code}</Badge>
+                    <Badge tone="info">{ind.verificationStatus.replace(/_/g, ' ')}</Badge>
+                  </div>
+                  <p className="mb-2 text-xs text-ink-secondary">{ind.description}</p>
+                  {ind.affectedPages?.length > 0 && (
+                    <p className="mb-2 text-[11px] text-ink-muted">
+                      Affected pages: {ind.affectedPages.join(', ')}
+                    </p>
+                  )}
+                  <ul className="mb-2 space-y-1">
+                    {ind.evidence.map((ev) => (
+                      <li key={ev.id} className="text-[11px] text-ink-muted">
+                        {ev.description}
+                        {ev.documentName ? ` · ${ev.documentName}` : ''}
+                        {ev.pageReference ? ` (${ev.pageReference})` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                  {ind.status === 'open' &&
+                    (ind.riskClass === 'technical_anomaly' ||
+                      ind.riskClass === 'authenticity_concern' ||
+                      ind.riskClass === 'possible_duplicate') &&
+                    (role === 'officer' || role === 'admin') && (
+                      <div className="mt-3 space-y-2 border-t border-border pt-3">
+                        <label className="block text-[11px] font-medium text-ink-secondary">
+                          Officer resolution (preserves original risk class)
+                        </label>
+                        <Textarea
+                          rows={2}
+                          value={forensicsReason[ind.id] ?? ''}
+                          onChange={(e) =>
+                            setForensicsReason((prev) => ({ ...prev, [ind.id]: e.target.value }))
+                          }
+                          placeholder="Explain acceptance, waiver, or resolution…"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          {(['resolved', 'waived', 'accepted'] as const).map((st) => (
+                            <Button
+                              key={st}
+                              size="sm"
+                              variant={st === 'resolved' ? 'primary' : 'outline'}
+                              disabled={forensicsResolveBusy === ind.id}
+                              onClick={async () => {
+                                const reason = (forensicsReason[ind.id] ?? '').trim()
+                                if (reason.length < 5) {
+                                  setForensicsMsg('Enter a resolution reason (min 5 characters).')
+                                  return
+                                }
+                                setForensicsResolveBusy(ind.id)
+                                try {
+                                  await api.resolveForensicsIndicator(role, ind.id, {
+                                    status: st,
+                                    reason,
+                                  })
+                                  setForensicsMsg(
+                                    `Recorded ${st} for ${ind.code}. Original risk ${ind.originalRiskClass ?? ind.riskClass} preserved.`,
+                                  )
+                                  await reload()
+                                } catch (err) {
+                                  setForensicsMsg(
+                                    err instanceof Error ? err.message : 'Resolve failed',
+                                  )
+                                } finally {
+                                  setForensicsResolveBusy(null)
+                                }
+                              }}
+                            >
+                              Mark {st}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {tab === 'verify' && (
             <div className="space-y-3">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
@@ -618,40 +861,175 @@ export function ApplicationDetailPage() {
 
           {tab === 'review' && (
             <div className="grid gap-4 lg:grid-cols-2">
-              <div>
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-                  <MessageSquare size={16} /> Reviewer notes
-                </div>
-                <ul className="mb-4 space-y-2">
-                  {detail.reviewNotes.map((n) => (
-                    <li key={n.id} className="rounded-[var(--radius-md)] border border-border p-3">
-                      <div className="text-xs font-medium text-ink">
-                        {n.author} · {n.role}
+              <div className="space-y-4">
+                <div>
+                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+                    <MessageSquare size={16} /> Reviewer notes
+                  </div>
+                  <ul className="mb-4 space-y-2">
+                    {detail.reviewNotes.map((n) => (
+                      <li key={n.id} className="rounded-[var(--radius-md)] border border-border p-3">
+                        <div className="text-xs font-medium text-ink">
+                          {n.author} · {n.role}
+                        </div>
+                        <p className="mt-1 text-sm text-ink-secondary">{n.content}</p>
+                        <div className="mt-1 text-[11px] text-ink-muted">
+                          {formatDateTime(n.createdAt)}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {(role === 'officer' || role === 'admin') && (
+                    <>
+                      <Textarea
+                        rows={2}
+                        placeholder="Add a review note…"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                      />
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          disabled={!note.trim() || workflowBusy}
+                          onClick={async () => {
+                            setWorkflowBusy(true)
+                            try {
+                              await api.addReviewNote(role, detail.id, note.trim())
+                              setNote('')
+                              setWorkflowMsg('Note saved.')
+                              await reload()
+                            } catch (err) {
+                              setWorkflowMsg(err instanceof Error ? err.message : 'Note failed')
+                            } finally {
+                              setWorkflowBusy(false)
+                            }
+                          }}
+                        >
+                          Save note
+                        </Button>
                       </div>
-                      <p className="mt-1 text-sm text-ink-secondary">{n.content}</p>
-                      <div className="mt-1 text-[11px] text-ink-muted">
-                        {formatDateTime(n.createdAt)}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <Textarea
-                  rows={3}
-                  placeholder="Add a review note (demo UI — persisted when API connected)…"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button size="sm" disabled={!note.trim()}>
-                    Save note
-                  </Button>
-                  <Button variant="outline" size="sm" leftIcon={<AlertTriangle size={14} />}>
-                    Flag for deficiency
-                  </Button>
-                  <Button variant="secondary" size="sm" leftIcon={<CheckCircle2 size={14} />}>
-                    Mark reviewed
-                  </Button>
+                    </>
+                  )}
                 </div>
+
+                {(role === 'officer' || role === 'admin') && (
+                  <div className="rounded-[var(--radius-md)] border border-border p-3">
+                    <div className="mb-2 text-sm font-semibold text-ink">Request clarification</div>
+                    <Input
+                      className="mb-2"
+                      value={clarifyTitle}
+                      onChange={(e) => setClarifyTitle(e.target.value)}
+                      placeholder="Title"
+                    />
+                    <Textarea
+                      rows={3}
+                      placeholder="Describe what the applicant must correct…"
+                      value={clarifyBody}
+                      onChange={(e) => setClarifyBody(e.target.value)}
+                    />
+                    <Button
+                      className="mt-2"
+                      size="sm"
+                      variant="outline"
+                      leftIcon={<AlertTriangle size={14} />}
+                      disabled={workflowBusy}
+                      onClick={async () => {
+                        setWorkflowBusy(true)
+                        try {
+                          await api.requestClarification(role, detail.id, {
+                            title: clarifyTitle,
+                            description: clarifyBody,
+                          })
+                          setWorkflowMsg('Clarification requested — status clarification_required.')
+                          setClarifyBody('')
+                          await reload()
+                        } catch (err) {
+                          setWorkflowMsg(err instanceof Error ? err.message : 'Clarification failed')
+                        } finally {
+                          setWorkflowBusy(false)
+                        }
+                      }}
+                    >
+                      Issue clarification / deficiency
+                    </Button>
+                  </div>
+                )}
+
+                {(role === 'officer' || role === 'admin') && (
+                  <div className="rounded-[var(--radius-md)] border border-border p-3">
+                    <div className="mb-2 text-sm font-semibold text-ink">Final recommendation</div>
+                    <p className="mb-2 text-[11px] text-ink-muted">
+                      Does not auto-reject from score alone. Reason is audited; prior findings kept.
+                    </p>
+                    <Textarea
+                      rows={2}
+                      placeholder="Decision reason…"
+                      value={decisionReason}
+                      onChange={(e) => setDecisionReason(e.target.value)}
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        leftIcon={<CheckCircle2 size={14} />}
+                        disabled={workflowBusy}
+                        onClick={async () => {
+                          setWorkflowBusy(true)
+                          try {
+                            await api.recordDecision(role, detail.id, {
+                              reason: decisionReason,
+                              recommend: true,
+                            })
+                            setWorkflowMsg('Recorded RECOMMENDED.')
+                            await reload()
+                          } catch (err) {
+                            setWorkflowMsg(err instanceof Error ? err.message : 'Decision failed')
+                          } finally {
+                            setWorkflowBusy(false)
+                          }
+                        }}
+                      >
+                        Recommend
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={workflowBusy}
+                        onClick={async () => {
+                          setWorkflowBusy(true)
+                          try {
+                            await api.recordDecision(role, detail.id, {
+                              reason: decisionReason,
+                              recommend: false,
+                            })
+                            setWorkflowMsg('Recorded REJECTED.')
+                            await reload()
+                          } catch (err) {
+                            setWorkflowMsg(err instanceof Error ? err.message : 'Decision failed')
+                          } finally {
+                            setWorkflowBusy(false)
+                          }
+                        }}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {(detail.deficiencies ?? []).length > 0 && (
+                  <div>
+                    <div className="mb-2 text-sm font-semibold text-ink">Deficiencies</div>
+                    <ul className="space-y-2">
+                      {(detail.deficiencies ?? []).map((d) => (
+                        <li key={d.id} className="rounded border border-border p-2 text-xs">
+                          <Badge tone={d.status === 'open' ? 'warning' : 'neutral'}>{d.status}</Badge>{' '}
+                          <span className="font-medium">{d.title}</span>
+                          <p className="mt-1 text-ink-secondary">{d.description}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
               <div>
                 <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">

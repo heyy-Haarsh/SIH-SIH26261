@@ -9,6 +9,7 @@ import { ApplicantDashboard } from '@/pages/applicant/ApplicantDashboard'
 import { ApplicantApplicationsPage } from '@/pages/applicant/ApplicantApplicationsPage'
 import { NewApplicationPage } from '@/pages/applicant/NewApplicationPage'
 import { UploadPage } from '@/pages/applicant/UploadPage'
+import { DeficienciesPage } from '@/pages/applicant/DeficienciesPage'
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
 import { PlaceholderPage } from '@/pages/shared/PlaceholderPage'
 import {
@@ -26,7 +27,6 @@ import {
   Shield,
   Users,
   Building2,
-  AlertTriangle,
 } from 'lucide-react'
 
 function RoleHomeRedirect() {
@@ -139,17 +139,7 @@ function AppRoutes() {
           />
         }
       />
-      <Route
-        path="/applicant/deficiencies"
-        element={
-          <PlaceholderPage
-            title="Deficiency Notices"
-            breadcrumbs={['Applicant', 'Deficiencies']}
-            description="Deficiency response workflow will list officer-issued notices. Demo findings appear on application details."
-            icon={AlertTriangle}
-          />
-        }
-      />
+      <Route path="/applicant/deficiencies" element={<DeficienciesPage />} />
       <Route
         path="/applicant/history"
         element={

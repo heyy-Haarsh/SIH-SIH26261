@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.seed import DEFAULT_DOCS
 from app.document_processing.aggregator import FindingAggregator, ReviewSupportPacketBuilder
 from app.document_processing.classifier import NameBasedClassifier
-from app.document_processing.forensics import UnavailableForensicsModule
+from app.document_processing.forensics import LocalForensicsModule
+from app.services import forensics_service
 from app.document_processing.reconciliation import BasicReconciliationModule
 from app.document_processing.types import (
     ClassificationResult,
@@ -33,6 +34,8 @@ from app.models.validation import Finding, FindingEvidence, ValidationRun
 from app.models.verification import VerificationRequest
 from app.rules.engine import ENGINE_VERSION, RULESET_VERSION, RuleEngine
 from app.services.audit_service import record_audit
+from app.services import scoring as scoring_service
+from app.services import workflow_service
 
 
 def _persist_finding(
@@ -94,7 +97,7 @@ def run_validation(
 
     classifier = NameBasedClassifier()
     reconciler = BasicReconciliationModule()
-    forensics = UnavailableForensicsModule()
+    forensics = LocalForensicsModule()
     rules = RuleEngine()
     aggregator = FindingAggregator()
 
@@ -219,11 +222,20 @@ def run_validation(
                 classification=classification,
             )
         )
-        forensics.analyze(file_name=version.file_name, content=None)
-
     requirements = (
         application.category.required_documents if application.category else DEFAULT_DOCS
     )
+
+    # Best-effort workflow: processing (actor may be None for system-triggered)
+    class _Actor:
+        def __init__(self, uid: str | None, name: str):
+            self.id = uid
+            self.name = name
+            self.role = type("R", (), {"value": "system"})()
+
+    actor_proxy = _Actor(triggered_by, actor_name) if triggered_by or actor_name else None
+    if actor_proxy:
+        workflow_service.mark_processing(db, application, actor=actor_proxy)
 
     now = datetime.now(timezone.utc)
     run = ValidationRun(
@@ -250,9 +262,18 @@ def run_validation(
         commit=False,
     )
     discrepancies = reconciliation_service.drafts_for_validation(db, application.id)
-    # Also include any brand-new drafts from this compare that are non-MATCH
-    # (drafts_for_validation already reads open items just persisted).
     _ = reconciler  # capability already recorded; persistence is authoritative
+
+    forensics_run = forensics_service.run_forensics(
+        db,
+        application,
+        triggered_by=triggered_by,
+        actor_name=actor_name,
+        trigger="validation",
+        validation_run_id=run.id,
+        commit=False,
+    )
+    forensics_drafts = forensics_service.drafts_for_validation(db, application.id)
 
     ctx = EvalContext(
         category_code=application.category.code if application.category else "",
@@ -265,7 +286,7 @@ def run_validation(
         today=date.today(),
     )
 
-    drafts = rules.evaluate(ctx) + mismatch_drafts
+    drafts = rules.evaluate(ctx) + mismatch_drafts + forensics_drafts
     aggregation = aggregator.aggregate(drafts, module_results)
 
     for draft in aggregation.findings:
@@ -315,26 +336,29 @@ def run_validation(
 
     packet = ReviewSupportPacketBuilder().build_packet(aggregation)
 
-    application.finding_count = len(aggregation.findings)
-    application.requires_manual_review = bool(packet.get("requiresManualReview"))
-    score = min(
-        100,
-        sum(
-            {"failed": 40, "manual_review": 30, "warning": 15, "info": 5}.get(f.severity.value, 5)
-            for f in aggregation.findings
-        ),
-    )
-    application.priority_score = score
-
     run.status = ValidationRunStatus.COMPLETED
     run.completed_at = datetime.now(timezone.utc)
+
+    if actor_proxy:
+        workflow_service.mark_under_scrutiny(db, application, actor=actor_proxy)
+    score_result = scoring_service.apply_score_to_application(db, application)
+
     run.summary = {
         **aggregation.summary,
-        "priorityScore": score,
+        "priorityScore": score_result.score,
         "priorityScoreNote": "Prioritization aid only — not proof of fraud or compliance",
+        "scoreConfigVersion": score_result.config_version,
+        "scoreBreakdown": score_result.to_dict(),
+        "scrutinySummary": application.scrutiny_summary,
         "reviewPacket": packet,
         "reconciliationRunId": recon_run.id,
         "reconciliationSummary": recon_run.summary,
+        "forensicsRunId": forensics_run.id,
+        "forensicsSummary": forensics_run.summary,
+        "forensicsLimitations": forensics_run.limitations,
+        "applicationStatus": (
+            application.status.value if hasattr(application.status, "value") else str(application.status)
+        ),
     }
 
     record_audit(
@@ -342,7 +366,7 @@ def run_validation(
         action="validation.run_completed",
         actor=actor_name,
         actor_id=triggered_by,
-        detail=f"{len(aggregation.findings)} findings; priority_score={score}",
+        detail=f"{len(aggregation.findings)} findings; priority_score={score_result.score}",
         application_id=application.id,
     )
     db.commit()

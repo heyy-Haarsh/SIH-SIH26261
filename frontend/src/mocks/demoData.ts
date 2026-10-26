@@ -466,6 +466,62 @@ function baseDetail(summary: ApplicationSummary): ApplicationDetail {
         originalOutcome: 'MISMATCH',
       },
     ],
+    forensicsIndicators: [
+      {
+        id: 'for-1',
+        documentId: 'doc-1',
+        code: 'metadata_anomaly',
+        riskClass: 'check_limitation',
+        originalRiskClass: 'check_limitation',
+        severity: 'info',
+        status: 'open',
+        verificationStatus: 'verification_pending',
+        title: 'PDF metadata largely absent',
+        description:
+          'Little or no standard PDF metadata. Missing metadata does not automatically imply tampering.',
+        affectedPages: [],
+        evidence: [
+          {
+            id: 'fe-1',
+            description: 'metadata keys present: []',
+            documentId: 'doc-1',
+            documentName: 'affidavit.pdf',
+          },
+        ],
+      },
+      {
+        id: 'for-2',
+        code: 'external_claim_simulated',
+        riskClass: 'check_limitation',
+        severity: 'info',
+        status: 'open',
+        verificationStatus: 'simulated_result',
+        title: 'External authenticity check is simulated',
+        description: 'No authorised live connector — simulated adapter only. Not fraud.',
+        affectedPages: [],
+        evidence: [],
+      },
+    ],
+    forensicsLimitations: [
+      'QR decode library not installed — QR presence may be noted but claims are not verified',
+    ],
+    deficiencies: [],
+    scoreBreakdown: {
+      score: 72,
+      configVersion: 'scrutiny-weights-v1',
+      contributions: [
+        {
+          source: 'finding',
+          label: 'Institution name mismatch across documents',
+          weightKey: 'manual_review_finding',
+          points: 18,
+        },
+      ],
+      notes: ['Demo mock score — not fraud proof'],
+      processingComplete: true,
+      disclaimer: 'Prioritization aid only',
+    },
+    scrutinySummary: { openFindings: 1, disclaimer: 'Demo mock summary' },
     verifications: [
       {
         id: 'ver-1',

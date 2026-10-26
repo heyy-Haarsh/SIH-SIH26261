@@ -4,13 +4,17 @@ import { Badge } from './Badge'
 const statusMap: Record<ApplicationStatus, { label: string; tone: Parameters<typeof Badge>[0]['tone'] }> = {
   draft: { label: 'Draft', tone: 'neutral' },
   submitted: { label: 'Submitted', tone: 'info' },
+  processing: { label: 'Processing', tone: 'pending' },
+  under_scrutiny: { label: 'Under Scrutiny', tone: 'brand' },
+  clarification_required: { label: 'Clarification Required', tone: 'warning' },
+  resubmitted: { label: 'Resubmitted', tone: 'info' },
+  recommended: { label: 'Recommended', tone: 'pass' },
+  rejected: { label: 'Rejected', tone: 'failed' },
   awaiting_review: { label: 'Awaiting Review', tone: 'pending' },
   under_review: { label: 'Under Review', tone: 'brand' },
   deficiency: { label: 'Deficiency', tone: 'warning' },
   manual_review: { label: 'Manual Review', tone: 'manual' },
   approved: { label: 'Approved', tone: 'pass' },
-  rejected: { label: 'Rejected', tone: 'failed' },
-  resubmitted: { label: 'Resubmitted', tone: 'info' },
 }
 
 const outcomeMap: Record<ValidationOutcome, { label: string; tone: Parameters<typeof Badge>[0]['tone'] }> = {
@@ -43,7 +47,7 @@ const verificationMap: Record<
 }
 
 export function ApplicationStatusBadge({ status }: { status: ApplicationStatus }) {
-  const cfg = statusMap[status]
+  const cfg = statusMap[status] ?? { label: status.replace(/_/g, ' '), tone: 'neutral' as const }
   return <Badge tone={cfg.tone}>{cfg.label}</Badge>
 }
 

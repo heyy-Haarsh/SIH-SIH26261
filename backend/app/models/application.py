@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -40,11 +40,17 @@ class Application(Base, TimestampMixin):
     priority: Mapped[Priority] = mapped_column(
         enum_type(Priority), default=Priority.LOW, nullable=False
     )
-    # Demo prioritisation aid only - not proof of fraud or compliance.
+    # Demo prioritisation aid only - not proof of fraud or compliance / auto-rejection.
     priority_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    score_config_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    score_breakdown: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    scrutiny_summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     requires_manual_review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     finding_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    deficiency_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     submitted_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    last_transition_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    last_transition_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     institution: Mapped[Institution] = relationship()
     category: Mapped[ApplicationCategory] = relationship()

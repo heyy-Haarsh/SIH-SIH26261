@@ -18,15 +18,27 @@ class UserRole(StrEnum):
 
 
 class ApplicationStatus(StrEnum):
+    """Scrutiny workflow statuses.
+
+    Phase 5 primary: submitted → processing → under_scrutiny →
+    clarification_required ↔ resubmitted → recommended | rejected.
+    Legacy values remain readable for older seed/demo rows.
+    """
+
     DRAFT = "draft"
     SUBMITTED = "submitted"
+    PROCESSING = "processing"
+    UNDER_SCRUTINY = "under_scrutiny"
+    CLARIFICATION_REQUIRED = "clarification_required"
+    RESUBMITTED = "resubmitted"
+    RECOMMENDED = "recommended"
+    REJECTED = "rejected"
+    # Legacy (still valid in DB / UI)
     AWAITING_REVIEW = "awaiting_review"
     UNDER_REVIEW = "under_review"
     DEFICIENCY = "deficiency"
     MANUAL_REVIEW = "manual_review"
     APPROVED = "approved"
-    REJECTED = "rejected"
-    RESUBMITTED = "resubmitted"
 
 
 class Priority(StrEnum):
@@ -99,8 +111,11 @@ class ReviewDecisionType(StrEnum):
     NOTE = "note"
     DEFICIENCY = "deficiency"
     MANUAL_REVIEW = "manual_review"
-    APPROVE = "approve"
+    CLARIFICATION = "clarification"
+    RECOMMEND = "recommend"
+    APPROVE = "approve"  # legacy alias of recommend
     REJECT = "reject"
+    RESUBMIT = "resubmit"
 
 
 class ExtractionMethod(StrEnum):
@@ -178,3 +193,48 @@ class ReconciliationItemStatus(StrEnum):
     WAIVED = "waived"
     ACCEPTED = "accepted"
     CLEARED = "cleared"  # no longer present after a later rerun
+
+
+class ForensicsRunStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ForensicsIndicatorStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    WAIVED = "waived"
+    ACCEPTED = "accepted"
+    CLEARED = "cleared"
+
+
+class ForensicsRiskClass(StrEnum):
+    """Distinguishes technical anomalies from authenticity concerns — never 'fraud'."""
+
+    INFORMATIONAL = "informational"
+    CHECK_LIMITATION = "check_limitation"  # missing metadata/signature/unavailable check
+    TECHNICAL_ANOMALY = "technical_anomaly"
+    AUTHENTICITY_CONCERN = "authenticity_concern"  # stronger signal; still not fraud
+    POSSIBLE_DUPLICATE = "possible_duplicate"
+
+
+class ForensicsIndicatorCode(StrEnum):
+    METADATA_ANOMALY = "metadata_anomaly"
+    MALFORMED_STRUCTURE = "malformed_structure"
+    UNUSUAL_MODIFICATION = "unusual_modification"
+    ENCRYPTION_DETECTED = "encryption_detected"
+    CORRUPT_UNREADABLE = "corrupt_unreadable"
+    UNSUPPORTED_FORMAT = "unsupported_format"
+    SIGNATURE_ABSENT = "signature_absent"
+    SIGNATURE_PRESENT = "signature_present"
+    SIGNATURE_INVALID = "signature_invalid"
+    QR_CHECK_UNAVAILABLE = "qr_check_unavailable"
+    QR_NOT_FOUND = "qr_not_found"
+    QR_DETECTED_UNVERIFIED = "qr_detected_unverified"
+    DUPLICATE_HASH = "duplicate_hash"
+    NEAR_DUPLICATE = "near_duplicate"
+    EXTERNAL_CLAIM_SIMULATED = "external_claim_simulated"
+    EXTERNAL_CLAIM_UNAVAILABLE = "external_claim_unavailable"
+    CLEAN_SCAN = "clean_scan"
