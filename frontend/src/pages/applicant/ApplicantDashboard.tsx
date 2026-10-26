@@ -41,6 +41,21 @@ export function ApplicantDashboard() {
         </div>
       )}
 
+      {apps.reduce((n, a) => n + a.deficiencyCount, 0) > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-amber-300 bg-amber-50 px-4 py-3">
+          <div className="text-sm text-amber-950">
+            <span className="font-semibold">Action needed:</span> officers requested clarification on{' '}
+            {apps.filter((a) => a.deficiencyCount > 0 || a.status === 'clarification_required').length}{' '}
+            application(s). Respond, upload corrections, then resubmit.
+          </div>
+          <Link to="/applicant/deficiencies">
+            <Button size="sm" leftIcon={<AlertTriangle size={14} />}>
+              Review clarifications
+            </Button>
+          </Link>
+        </div>
+      )}
+
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="My applications" value={apps.length} icon={FolderOpen} />
         <StatCard

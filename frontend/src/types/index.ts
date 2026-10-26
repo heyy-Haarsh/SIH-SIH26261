@@ -379,3 +379,99 @@ export interface ApiHealth {
   storageBackend: string
   demoAuth: boolean
 }
+
+export interface AdminUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  institutionId?: string | null
+  institutionName?: string | null
+  isActive: boolean
+  createdAt?: string | null
+}
+
+export interface AdminInstitution {
+  id: string
+  name: string
+  code: string
+  state: string
+  type: string
+}
+
+export interface AdminCategory {
+  id: string
+  code: string
+  name: string
+  description: string
+  requiredDocuments: Array<{
+    code: string
+    name: string
+    mandatory: boolean
+    allowedTypes: string[]
+  }>
+  isActive: boolean
+}
+
+export interface AdminRuleVersion {
+  id: string
+  version: string
+  definition: Record<string, unknown>
+  status: string
+  changeReason?: string
+  createdById?: string | null
+  effectiveFrom?: string | null
+  effectiveTo?: string | null
+  publishedAt?: string | null
+  createdAt: string
+}
+
+export interface AdminRule {
+  id: string
+  ruleCode: string
+  name: string
+  description: string
+  handbookRef: string
+  verifiedSourceRef?: string
+  isSynthetic: boolean
+  isActive: boolean
+  currentVersion: string
+  versions: AdminRuleVersion[]
+}
+
+export interface AdminSetting {
+  key: string
+  value: Record<string, unknown>
+  description: string
+  updatedById?: string | null
+  changeReason?: string
+  updatedAt?: string | null
+}
+
+export interface AdminAuditEvent {
+  id: string
+  action: string
+  actor: string
+  actorRole?: string
+  timestamp: string
+  detail: string
+  applicationId?: string | null
+  entityType?: string | null
+  entityId?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export interface AdminAuditPage {
+  items: AdminAuditEvent[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface AdminStats {
+  userCount: number
+  activeRuleCount: number
+  categoryCount: number
+  auditEvents24h: number
+  liveVerificationEnabled: boolean
+}

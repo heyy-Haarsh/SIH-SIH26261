@@ -9,6 +9,7 @@ from app.models.forensics import ForensicsEvidence, ForensicsIndicator, Forensic
 from app.models.reconciliation import ReconciliationItem, ReconciliationRun, ReconciliationValue
 from app.models.review import DeficiencyNotice, ReviewDecision
 from app.models.rule import RegulatoryRule, RuleVersion
+from app.models.settings import SystemSetting
 from app.models.user import Institution, User
 from app.models.validation import Finding, FindingEvidence, ValidationRun
 from app.models.verification import VerificationRequest
@@ -34,6 +35,7 @@ __all__ = [
     "RegulatoryRule",
     "ReviewDecision",
     "RuleVersion",
+    "SystemSetting",
     "User",
     "ValidationRun",
     "VerificationRequest",

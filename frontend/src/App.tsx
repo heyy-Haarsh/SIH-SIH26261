@@ -11,9 +11,14 @@ import { NewApplicationPage } from '@/pages/applicant/NewApplicationPage'
 import { UploadPage } from '@/pages/applicant/UploadPage'
 import { DeficienciesPage } from '@/pages/applicant/DeficienciesPage'
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
+import { UsersPage } from '@/pages/admin/UsersPage'
+import { CategoriesPage } from '@/pages/admin/CategoriesPage'
+import { RequirementsPage } from '@/pages/admin/RequirementsPage'
+import { RulesPage } from '@/pages/admin/RulesPage'
+import { AuditPage } from '@/pages/admin/AuditPage'
+import { SettingsPage } from '@/pages/admin/SettingsPage'
 import { PlaceholderPage } from '@/pages/shared/PlaceholderPage'
 import {
-  Activity,
   ClipboardCheck,
   FileSearch,
   FileText,
@@ -21,12 +26,8 @@ import {
   History,
   ListChecks,
   Plug,
-  Scale,
   ScrollText,
-  Settings,
   Shield,
-  Users,
-  Building2,
 } from 'lucide-react'
 
 function RoleHomeRedirect() {
@@ -154,72 +155,22 @@ function AppRoutes() {
 
       {/* Administrator */}
       <Route path="/admin" element={<AdminDashboard />} />
-      <Route
-        path="/admin/users"
-        element={
-          <PlaceholderPage
-            title="Users & Roles"
-            breadcrumbs={['Administrator', 'Users']}
-            description="User and role management APIs are scaffolded. Only applicant, officer, and admin roles exist."
-            icon={Users}
-          />
-        }
-      />
-      <Route
-        path="/admin/categories"
-        element={
-          <PlaceholderPage
-            title="Application Categories"
-            breadcrumbs={['Administrator', 'Categories']}
-            description="Category configuration will drive document requirements per application type."
-            icon={Building2}
-          />
-        }
-      />
-      <Route
-        path="/admin/requirements"
-        element={
-          <PlaceholderPage
-            title="Document Requirements"
-            breadcrumbs={['Administrator', 'Requirements']}
-            description="Versioned document requirement matrices will be managed here."
-            icon={ListChecks}
-          />
-        }
-      />
-      <Route
-        path="/admin/rules"
-        element={
-          <PlaceholderPage
-            title="Regulatory Rules"
-            breadcrumbs={['Administrator', 'Rules']}
-            description="Versioned synthetic demo rules are seeded in the backend. Official handbook rules will replace them after verification."
-            icon={Scale}
-          />
-        }
-      />
+      <Route path="/admin/users" element={<UsersPage />} />
+      <Route path="/admin/categories" element={<CategoriesPage />} />
+      <Route path="/admin/requirements" element={<RequirementsPage />} />
+      <Route path="/admin/rules" element={<RulesPage />} />
       <Route
         path="/admin/integrations"
         element={
           <PlaceholderPage
             title="Integration Configuration"
             breadcrumbs={['Administrator', 'Integrations']}
-            description="Configure MinIO, Redis/Celery, and authorized verification connectors. Nothing is presented as live without configuration."
+            description="Configure MinIO, Redis/Celery, and authorized verification connectors. Nothing is presented as live without configuration. Use Settings for verification toggles."
             icon={Plug}
           />
         }
       />
-      <Route
-        path="/admin/audit"
-        element={
-          <PlaceholderPage
-            title="Audit Trail"
-            breadcrumbs={['Administrator', 'Audit']}
-            description="System-wide audit browser will aggregate security-relevant events."
-            icon={Activity}
-          />
-        }
-      />
+      <Route path="/admin/audit" element={<AuditPage />} />
       <Route
         path="/admin/health"
         element={
@@ -231,17 +182,7 @@ function AppRoutes() {
           />
         }
       />
-      <Route
-        path="/admin/settings"
-        element={
-          <PlaceholderPage
-            title="Settings"
-            breadcrumbs={['Administrator', 'Settings']}
-            description="Retention, upload limits, and environment flags will be managed here."
-            icon={Settings}
-          />
-        }
-      />
+      <Route path="/admin/settings" element={<SettingsPage />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

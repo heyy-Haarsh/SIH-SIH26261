@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   FileText,
@@ -85,9 +85,24 @@ export function ApplicationDetailPage() {
   const [clarifyTitle, setClarifyTitle] = useState('Clarification required')
   const [clarifyBody, setClarifyBody] = useState('')
   const [decisionReason, setDecisionReason] = useState('')
+  const [deficiencyResponses, setDeficiencyResponses] = useState<Record<string, string>>({})
   const roleLabel =
     role === 'officer' ? 'Scrutiny Officer' : role === 'applicant' ? 'Applicant' : 'Administrator'
   const listPath = role === 'applicant' ? '/applicant/applications' : '/officer/queue'
+  const openDeficiencies = (detail?.deficiencies ?? []).filter((d) => d.status === 'open')
+
+  useEffect(() => {
+    if (!detail) return
+    if (
+      detail.status === 'clarification_required' ||
+      detail.status === 'deficiency' ||
+      openDeficiencies.length > 0
+    ) {
+      setTab('review')
+    }
+    // Only auto-switch when application identity/status changes — not on every deficiency edit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.id, detail?.status, openDeficiencies.length])
 
   if (loading) {
     return (
@@ -196,6 +211,69 @@ export function ApplicationDetailPage() {
         </div>
       )}
 
+      {openDeficiencies.length > 0 && (
+        <div className="mb-4 rounded-[var(--radius-md)] border border-amber-300 bg-amber-50 px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-950">
+              <AlertTriangle size={16} />
+              {openDeficiencies.length} open clarification
+              {openDeficiencies.length === 1 ? '' : 's'} / deficiency notice
+              {openDeficiencies.length === 1 ? '' : 's'}
+            </div>
+            {role === 'applicant' && (
+              <Link to="/applicant/deficiencies" className="text-xs font-medium text-brand underline">
+                Open deficiency inbox
+              </Link>
+            )}
+          </div>
+          <ul className="space-y-3">
+            {openDeficiencies.map((d) => (
+              <li key={d.id} className="rounded border border-amber-200 bg-white/70 p-3 text-xs">
+                <div className="font-medium text-ink">{d.title}</div>
+                <p className="mt-1 text-ink-secondary">{d.description}</p>
+                {role === 'applicant' && (
+                  <div className="mt-2 space-y-2 border-t border-amber-100 pt-2">
+                    <Textarea
+                      rows={2}
+                      placeholder="Describe how you addressed this…"
+                      value={deficiencyResponses[d.id] ?? ''}
+                      onChange={(e) =>
+                        setDeficiencyResponses((prev) => ({ ...prev, [d.id]: e.target.value }))
+                      }
+                    />
+                    <Button
+                      size="sm"
+                      disabled={workflowBusy}
+                      onClick={async () => {
+                        const response = (deficiencyResponses[d.id] ?? '').trim()
+                        if (response.length < 5) {
+                          setWorkflowMsg('Enter a response (min 5 characters).')
+                          return
+                        }
+                        setWorkflowBusy(true)
+                        try {
+                          await api.respondDeficiency(role, d.id, response)
+                          setWorkflowMsg(
+                            'Response recorded. Upload corrected docs if needed, then Resubmit.',
+                          )
+                          await reload()
+                        } catch (err) {
+                          setWorkflowMsg(err instanceof Error ? err.message : 'Respond failed')
+                        } finally {
+                          setWorkflowBusy(false)
+                        }
+                      }}
+                    >
+                      Submit response
+                    </Button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mb-5 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -286,7 +364,11 @@ export function ApplicationDetailPage() {
                 ).length,
               },
               { id: 'verify', label: 'Verification' },
-              { id: 'review', label: 'Review & audit' },
+              {
+                id: 'review',
+                label: 'Clarifications & audit',
+                count: (detail.deficiencies ?? []).length || undefined,
+              },
             ]}
           />
         </div>
@@ -1016,20 +1098,92 @@ export function ApplicationDetailPage() {
                   </div>
                 )}
 
-                {(detail.deficiencies ?? []).length > 0 && (
-                  <div>
-                    <div className="mb-2 text-sm font-semibold text-ink">Deficiencies</div>
+                <div>
+                  <div className="mb-2 text-sm font-semibold text-ink">
+                    Clarification / deficiency notices
+                  </div>
+                  {(detail.deficiencies ?? []).length === 0 ? (
+                    <p className="text-xs text-ink-muted">
+                      No clarification requests yet. When an officer issues one, it appears here and
+                      in the applicant Deficiency Notices inbox.
+                    </p>
+                  ) : (
                     <ul className="space-y-2">
                       {(detail.deficiencies ?? []).map((d) => (
                         <li key={d.id} className="rounded border border-border p-2 text-xs">
-                          <Badge tone={d.status === 'open' ? 'warning' : 'neutral'}>{d.status}</Badge>{' '}
+                          <Badge
+                            tone={
+                              d.status === 'open'
+                                ? 'warning'
+                                : d.status === 'responded'
+                                  ? 'info'
+                                  : 'neutral'
+                            }
+                          >
+                            {d.status}
+                          </Badge>{' '}
                           <span className="font-medium">{d.title}</span>
                           <p className="mt-1 text-ink-secondary">{d.description}</p>
+                          {d.applicantResponse && (
+                            <p className="mt-1 text-[11px] text-ink-muted">
+                              Applicant response: {d.applicantResponse}
+                            </p>
+                          )}
+                          {role === 'applicant' && d.status === 'open' && (
+                            <div className="mt-2 space-y-2 border-t border-border pt-2">
+                              <Textarea
+                                rows={2}
+                                placeholder="Describe how you addressed this…"
+                                value={deficiencyResponses[d.id] ?? ''}
+                                onChange={(e) =>
+                                  setDeficiencyResponses((prev) => ({
+                                    ...prev,
+                                    [d.id]: e.target.value,
+                                  }))
+                                }
+                              />
+                              <Button
+                                size="sm"
+                                disabled={workflowBusy}
+                                onClick={async () => {
+                                  const response = (deficiencyResponses[d.id] ?? '').trim()
+                                  if (response.length < 5) {
+                                    setWorkflowMsg('Enter a response (min 5 characters).')
+                                    return
+                                  }
+                                  setWorkflowBusy(true)
+                                  try {
+                                    await api.respondDeficiency(role, d.id, response)
+                                    setWorkflowMsg(
+                                      'Response recorded. Upload corrected docs if needed, then Resubmit.',
+                                    )
+                                    await reload()
+                                  } catch (err) {
+                                    setWorkflowMsg(
+                                      err instanceof Error ? err.message : 'Respond failed',
+                                    )
+                                  } finally {
+                                    setWorkflowBusy(false)
+                                  }
+                                }}
+                              >
+                                Submit response
+                              </Button>
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
-                  </div>
-                )}
+                  )}
+                  {role === 'applicant' && (
+                    <Link
+                      to="/applicant/deficiencies"
+                      className="mt-2 inline-block text-xs text-brand underline"
+                    >
+                      View all deficiency notices
+                    </Link>
+                  )}
+                </div>
               </div>
               <div>
                 <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">

@@ -100,6 +100,13 @@ def run_validation(
     forensics = LocalForensicsModule()
     rules = RuleEngine()
     aggregator = FindingAggregator()
+    # Prefer published, in-window DB rule versions; engine still skips unknown codes.
+    from app.services import admin_service as _admin_cfg
+
+    try:
+        active_rule_map, disabled_rule_codes = _admin_cfg.active_rule_runtimes(db)
+    except Exception:  # noqa: BLE001 — never fail validation solely because config lookup failed
+        active_rule_map, disabled_rule_codes = None, set()
 
     module_results: list[ModuleResult] = [
         classifier.capability(),
@@ -286,7 +293,11 @@ def run_validation(
         today=date.today(),
     )
 
-    drafts = rules.evaluate(ctx) + mismatch_drafts + forensics_drafts
+    drafts = (
+        rules.evaluate(ctx, active_rule_map, disabled_rule_codes)
+        + mismatch_drafts
+        + forensics_drafts
+    )
     aggregation = aggregator.aggregate(drafts, module_results)
 
     for draft in aggregation.findings:

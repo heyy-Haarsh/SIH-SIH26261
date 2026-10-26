@@ -383,20 +383,28 @@ class RuleEngine(RuleEvaluationModule):
         )
 
     def evaluate(
-        self, ctx: EvalContext, active_rules: Optional[dict[str, RuleRuntime]] = None
+        self,
+        ctx: EvalContext,
+        active_rules: Optional[dict[str, RuleRuntime]] = None,
+        disabled_codes: Optional[set[str]] = None,
     ) -> list[FindingDraft]:
-        """Evaluate rules. ``active_rules`` maps rule code -> runtime; absent codes are skipped.
-        When ``None`` every built-in rule runs with its default parameters.
+        """Evaluate rules.
+
+        - ``active_rules`` maps rule code → DB-published runtime (params/version overlay).
+        - ``disabled_codes`` skips admin-disabled rules.
+        - Built-in codes with no DB row still run on defaults (demo engine completeness).
+        - When ``active_rules`` is ``None`` and no disables, every built-in runs with defaults.
         """
+        disabled = disabled_codes or set()
         findings: list[FindingDraft] = []
         for rule in self.rules:
-            if active_rules is None:
-                runtime = RuleRuntime(RULESET_VERSION, dict(rule.default_params))
-            elif rule.code in active_rules:
+            if rule.code in disabled:
+                continue
+            if active_rules is not None and rule.code in active_rules:
                 runtime = active_rules[rule.code]
                 merged = {**rule.default_params, **runtime.params}
                 runtime = RuleRuntime(runtime.version, merged)
             else:
-                continue
+                runtime = RuleRuntime(RULESET_VERSION, dict(rule.default_params))
             findings.extend(rule.evaluate(ctx, runtime))
         return findings

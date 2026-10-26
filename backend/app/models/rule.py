@@ -9,7 +9,12 @@ from app.models.base import TimestampMixin, UTCDateTime, new_id, utcnow
 
 
 class RegulatoryRule(Base, TimestampMixin):
-    """A deterministic rule. All shipped rules are SYNTHETIC demo rules, not official AICTE rules."""
+    """A deterministic rule.
+
+    Shipped demo rows are SYNTHETIC (``is_synthetic=True``). Official regulatory
+    rules must set ``is_synthetic=False`` and provide a verified source citation —
+    never invent AICTE handbook clauses.
+    """
 
     __tablename__ = "regulatory_rules"
 
@@ -18,16 +23,23 @@ class RegulatoryRule(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     handbook_ref: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    # Required when is_synthetic=False — citation to verified source material only
+    verified_source_ref: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     is_synthetic: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     current_version: Mapped[str] = mapped_column(String(32), nullable=False)
 
     versions: Mapped[list["RuleVersion"]] = relationship(
-        back_populates="rule", cascade="all, delete-orphan", order_by="RuleVersion.created_at"
+        back_populates="rule",
+        # Keep historical versions even if collection sync glitches; never orphan-delete history.
+        cascade="save-update, merge",
+        order_by="RuleVersion.created_at",
     )
 
 
 class RuleVersion(Base):
+    """Immutable rule definition snapshot. Never overwrite historical rows — publish a new version."""
+
     __tablename__ = "rule_versions"
     __table_args__ = (UniqueConstraint("rule_id", "version", name="uq_rule_version"),)
 
@@ -36,9 +48,15 @@ class RuleVersion(Base):
         ForeignKey("regulatory_rules.id", ondelete="CASCADE"), index=True, nullable=False
     )
     version: Mapped[str] = mapped_column(String(32), nullable=False)
-    # {"params": {...}, "description": "..."} - parameters consumed by the rule engine
+    # {"params": {...}, "logic": "...", "description": "..."} — parameters for the rule engine
     definition: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # draft | published | retired
+    status: Mapped[str] = mapped_column(String(32), default="published", nullable=False, index=True)
+    change_reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_by_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     effective_from: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    effective_to: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
     rule: Mapped[RegulatoryRule] = relationship(back_populates="versions")

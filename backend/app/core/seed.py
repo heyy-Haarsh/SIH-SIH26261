@@ -120,9 +120,13 @@ def seed_if_empty(db: Session) -> None:
                 rule_id=rule.id,
                 version="v0.1-demo",
                 definition={"logic": logic, "synthetic": True},
+                status="published",
+                change_reason="Seeded synthetic demo version",
                 effective_from=now,
+                published_at=now,
             )
         )
+
 
     new_eng = next(c for c in cat_objs if c.code == "NEW-ENG")
     app = Application(
