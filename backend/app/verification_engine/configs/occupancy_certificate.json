@@ -1,0 +1,29 @@
+{
+  "code": "OCCUPANCY_CERTIFICATE",
+  "requirement_code": "OCCUPANCY_CERTIFICATE",
+  "name": "Occupancy / Completion Certificate / Building License / Form D",
+  "version": "v1",
+  "is_synthetic_rules": true,
+  "handbook_note": "[SYNTHETIC] Demo occupancy/building-license field rules — not official municipal AICTE clauses.",
+  "layer1": {
+    "required_fields": ["certificate_number", "issue_date", "issuing_authority", "address"],
+    "optional_fields": ["valid_until", "plot_number", "institution_name"],
+    "date_checks": [
+      {"field": "issue_date", "not_future": true, "ambiguous_is_manual": true},
+      {"field": "valid_until", "not_expired": true, "optional": true, "ambiguous_is_manual": true}
+    ],
+    "format_checks": [],
+    "cross_field_checks": [
+      {"type": "date_order", "earlier": "issue_date", "later": "valid_until", "optional_later": true}
+    ]
+  },
+  "layer2": {
+    "adapters": [
+      {"id": "pdf_signature", "claim_type": "digital_signature"},
+      {"id": "building_permission", "claim_type": "building_permission", "required_authorized_source": true}
+    ]
+  },
+  "layer3": {
+    "require_review_when": ["rule_fail", "external_unavailable", "expired", "external_simulated"]
+  }
+}

@@ -35,7 +35,38 @@ DEFAULT_DOCS = [
     },
     {
         "code": "FIRE_NOC",
-        "name": "Fire Safety NOC",
+        "name": "Fire Safety Certificate / NOC",
+        "mandatory": False,
+        "allowed_types": ["pdf"],
+    },
+    # Phase 7 document types (config-driven three-layer verification)
+    {
+        "code": "AICTE_PAYMENT_RECEIPT",
+        "name": "AICTE Payment Receipt",
+        "mandatory": False,
+        "allowed_types": ["pdf"],
+    },
+    {
+        "code": "OCCUPANCY_CERTIFICATE",
+        "name": "Occupancy / Completion Certificate / Building License / Form D",
+        "mandatory": False,
+        "allowed_types": ["pdf"],
+    },
+    {
+        "code": "STRUCTURAL_STABILITY",
+        "name": "Structural Stability Certificate",
+        "mandatory": False,
+        "allowed_types": ["pdf"],
+    },
+    {
+        "code": "SATELLITE_MAP",
+        "name": "Satellite Map",
+        "mandatory": False,
+        "allowed_types": ["pdf", "jpg", "png"],
+    },
+    {
+        "code": "AUDITED_ACCOUNTS",
+        "name": "Previous-year Audited Statement of Accounts",
         "mandatory": False,
         "allowed_types": ["pdf"],
     },

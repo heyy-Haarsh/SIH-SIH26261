@@ -128,6 +128,52 @@ export interface DocumentItem {
   selectedCategory?: string | null
   categoryMismatch?: boolean
   latestExtractionRunId?: string | null
+  /** Phase 7 — independent of authenticity */
+  ruleValidationStatus?: string | null
+  externalVerificationStatus?: string | null
+  reviewStatus?: string | null
+  latestVerificationRunId?: string | null
+}
+
+export interface DocumentVerificationCheck {
+  id: string
+  runId: string
+  applicationId: string
+  documentId: string
+  layer: string
+  checkCode: string
+  title: string
+  detail: string
+  outcome: string
+  severity: string
+  source: string
+  adapter: string
+  isSyntheticRule: boolean
+  evidence: Record<string, unknown>
+  limitations: string[]
+  status: string
+  resolutionReason?: string | null
+  resolvedAt?: string | null
+  createdAt: string
+}
+
+export interface DocumentVerificationRun {
+  id: string
+  applicationId: string
+  documentId: string
+  documentVersionId: string
+  configCode: string
+  configVersion: string
+  status: string
+  ruleValidationStatus: string
+  externalVerificationStatus: string
+  reviewStatus: string
+  summary: Record<string, unknown>
+  limitations: string[]
+  scrutinyReport: Record<string, unknown>
+  createdAt: string
+  completedAt?: string | null
+  checks: DocumentVerificationCheck[]
 }
 
 export interface ExtractedField {
@@ -337,6 +383,7 @@ export interface ApplicationDetail extends ApplicationSummary {
   forensicsLimitations: string[]
   deficiencies: DeficiencyNotice[]
   verifications: VerificationResult[]
+  documentVerificationRuns?: DocumentVerificationRun[]
   reviewNotes: ReviewNote[]
   auditEvents: AuditEvent[]
   validationRunId?: string

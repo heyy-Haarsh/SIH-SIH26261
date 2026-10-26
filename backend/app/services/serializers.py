@@ -252,6 +252,16 @@ def document_to_out(doc: Document, db: Session | None = None) -> DocumentOut:
         selected_category=selected,
         category_mismatch=mismatch,
         latest_extraction_run_id=run_id,
+        rule_validation_status=_enum_val(getattr(doc, "rule_validation_status", None))
+        if getattr(doc, "rule_validation_status", None) is not None
+        else "pending",
+        external_verification_status=_enum_val(getattr(doc, "external_verification_status", None))
+        if getattr(doc, "external_verification_status", None) is not None
+        else "pending",
+        review_status=_enum_val(getattr(doc, "review_status", None))
+        if getattr(doc, "review_status", None) is not None
+        else "pending",
+        latest_verification_run_id=getattr(doc, "latest_verification_run_id", None),
     )
 
 
@@ -344,6 +354,33 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
         .order_by(DeficiencyNotice.created_at.desc())
         .all()
     )
+    from app.models.doc_verification import DocumentVerificationRun
+    from app.services import doc_verification_service as doc_verif_svc
+
+    # Latest run per document (Phase 7)
+    doc_runs_q = (
+        db.query(DocumentVerificationRun)
+        .filter(DocumentVerificationRun.application_id == app.id)
+        .order_by(DocumentVerificationRun.created_at.desc())
+        .all()
+    )
+    latest_by_doc: dict[str, DocumentVerificationRun] = {}
+    for r in doc_runs_q:
+        if r.document_id not in latest_by_doc:
+            latest_by_doc[r.document_id] = r
+    # Ensure checks are loaded
+    doc_verif_out = []
+    for r in latest_by_doc.values():
+        full = (
+            db.query(DocumentVerificationRun)
+            .filter(DocumentVerificationRun.id == r.id)
+            .first()
+        )
+        if full:
+            # lazy-load checks
+            _ = full.checks
+            doc_verif_out.append(doc_verif_svc.run_to_dict(full))
+
     return ApplicationDetailOut(
         **summary.model_dump(),
         academic_year=app.academic_year,
@@ -367,6 +404,7 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
         scrutiny_summary=dict(app.scrutiny_summary or {}),
         last_transition_at=app.last_transition_at,
         last_transition_note=app.last_transition_note,
+        document_verification_runs=doc_verif_out,
         verifications=[
             VerificationOut(
                 id=v.id,

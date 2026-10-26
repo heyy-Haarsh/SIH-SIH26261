@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     aicte_api_key: str = ""
     enable_live_verification: bool = False
 
+    # Phase 7 geocoding (public Nominatim) — off by default to respect usage limits
+    enable_nominatim_geocode: bool = False
+    nominatim_user_agent: str = "PRAMAN-SIH26261/0.1 (local-dev; contact=admin@praman.local)"
+    geocode_mismatch_meters: float = 5000.0
+
     # Document intelligence (local; no cloud required)
     enable_local_pdf_extraction: bool = True
     enable_local_ocr: bool = True

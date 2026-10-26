@@ -1,0 +1,27 @@
+{
+  "code": "STRUCTURAL_STABILITY",
+  "requirement_code": "STRUCTURAL_STABILITY",
+  "name": "Structural Stability Certificate",
+  "version": "v1",
+  "is_synthetic_rules": true,
+  "handbook_note": "[SYNTHETIC] Demo structural-stability field rules — engineer credential check has no authorized live source in this build.",
+  "layer1": {
+    "required_fields": ["certificate_number", "issue_date", "issuing_authority", "engineer_name"],
+    "optional_fields": ["engineer_registration_number", "valid_until", "institution_name"],
+    "date_checks": [
+      {"field": "issue_date", "not_future": true, "max_age_days": 1825, "ambiguous_is_manual": true},
+      {"field": "valid_until", "not_expired": true, "optional": true, "ambiguous_is_manual": true}
+    ],
+    "format_checks": [],
+    "cross_field_checks": []
+  },
+  "layer2": {
+    "adapters": [
+      {"id": "pdf_signature", "claim_type": "digital_signature"},
+      {"id": "engineer_credential", "claim_type": "engineer_credential", "required_authorized_source": true}
+    ]
+  },
+  "layer3": {
+    "require_review_when": ["rule_fail", "external_unavailable", "external_simulated"]
+  }
+}

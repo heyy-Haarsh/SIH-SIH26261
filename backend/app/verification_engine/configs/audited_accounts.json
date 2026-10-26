@@ -1,0 +1,28 @@
+{
+  "code": "AUDITED_ACCOUNTS",
+  "requirement_code": "AUDITED_ACCOUNTS",
+  "name": "Previous-year Audited Statement of Accounts",
+  "version": "v1",
+  "is_synthetic_rules": true,
+  "handbook_note": "[SYNTHETIC] Demo audited-accounts field rules — auditor credential registry not connected.",
+  "layer1": {
+    "required_fields": ["financial_year", "auditor_name", "issue_date"],
+    "optional_fields": ["auditor_registration_number", "institution_name", "reference_number"],
+    "date_checks": [
+      {"field": "issue_date", "not_future": true, "max_age_days": 900, "ambiguous_is_manual": true}
+    ],
+    "format_checks": [
+      {"field": "financial_year", "pattern": "^[0-9]{4}-[0-9]{2,4}$", "message": "Expected FY like 2024-25"}
+    ],
+    "cross_field_checks": []
+  },
+  "layer2": {
+    "adapters": [
+      {"id": "pdf_signature", "claim_type": "digital_signature"},
+      {"id": "auditor_credential", "claim_type": "auditor_credential", "required_authorized_source": true}
+    ]
+  },
+  "layer3": {
+    "require_review_when": ["rule_fail", "external_unavailable", "external_simulated"]
+  }
+}

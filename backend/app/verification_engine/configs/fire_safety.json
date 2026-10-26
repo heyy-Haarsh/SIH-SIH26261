@@ -1,0 +1,29 @@
+{
+  "code": "FIRE_SAFETY",
+  "requirement_code": "FIRE_NOC",
+  "name": "Fire Safety Certificate / NOC",
+  "version": "v1",
+  "is_synthetic_rules": true,
+  "handbook_note": "[SYNTHETIC] Demo fire-safety field rules — maps to existing FIRE_NOC requirement; not an official fire-service API integration.",
+  "layer1": {
+    "required_fields": ["certificate_number", "issue_date", "issuing_authority", "valid_until"],
+    "optional_fields": ["institution_name", "address"],
+    "date_checks": [
+      {"field": "issue_date", "not_future": true, "ambiguous_is_manual": true},
+      {"field": "valid_until", "not_expired": true, "ambiguous_is_manual": true}
+    ],
+    "format_checks": [],
+    "cross_field_checks": [
+      {"type": "date_order", "earlier": "issue_date", "later": "valid_until"}
+    ]
+  },
+  "layer2": {
+    "adapters": [
+      {"id": "pdf_signature", "claim_type": "digital_signature"},
+      {"id": "fire_certificate", "claim_type": "fire_certificate", "required_authorized_source": true}
+    ]
+  },
+  "layer3": {
+    "require_review_when": ["rule_fail", "expired", "external_unavailable", "external_simulated"]
+  }
+}

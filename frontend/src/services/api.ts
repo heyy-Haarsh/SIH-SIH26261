@@ -11,6 +11,8 @@ import type {
   ApplicationSummary,
   DeficiencyNotice,
   Discrepancy,
+  DocumentVerificationCheck,
+  DocumentVerificationRun,
   ExtractionRun,
   Finding,
   ForensicsIndicator,
@@ -408,4 +410,41 @@ export const api = {
     const qs = q.toString()
     return request<AdminAuditPage>(`/admin/audit${qs ? `?${qs}` : ''}`, { role })
   },
+
+  // ---- Phase 7 document verification ------------------------------------
+  listDocVerificationConfigs: (role: string) =>
+    request<
+      Array<{
+        code: string
+        requirementCode: string
+        name: string
+        version: string
+        isSyntheticRules: boolean
+        handbookNote?: string
+        adapters: string[]
+      }>
+    >('/document-verification/configs', { role }),
+
+  runApplicationDocVerification: (role: string, applicationId: string) =>
+    request<DocumentVerificationRun[]>(`/applications/${applicationId}/document-verification`, {
+      method: 'POST',
+      role,
+    }),
+
+  listApplicationDocVerification: (role: string, applicationId: string) =>
+    request<DocumentVerificationRun[]>(`/applications/${applicationId}/document-verification`, {
+      role,
+    }),
+
+  resolveDocVerificationCheck: (
+    role: string,
+    checkId: string,
+    body: { status: string; reason: string },
+  ) =>
+    request<DocumentVerificationCheck>(`/document-verification-checks/${checkId}/resolve`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 }

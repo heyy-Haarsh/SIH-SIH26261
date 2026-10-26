@@ -76,6 +76,11 @@ class DocumentOut(CamelModel):
     selected_category: str | None = None
     category_mismatch: bool = False
     latest_extraction_run_id: str | None = None
+    # Phase 7 three-layer statuses (independent; L1 pass ≠ authenticity)
+    rule_validation_status: str | None = None
+    external_verification_status: str | None = None
+    review_status: str | None = None
+    latest_verification_run_id: str | None = None
 
 
 class ExtractedFieldOut(CamelModel):
@@ -267,6 +272,7 @@ class ApplicationDetailOut(ApplicationSummaryOut):
     forensics_limitations: list[str] = Field(default_factory=list)
     deficiencies: list[DeficiencyOut] = Field(default_factory=list)
     verifications: list[VerificationOut] = Field(default_factory=list)
+    document_verification_runs: list[dict[str, Any]] = Field(default_factory=list)
     review_notes: list[ReviewNoteOut] = Field(default_factory=list)
     audit_events: list[AuditEventOut] = Field(default_factory=list)
     validation_run_id: str | None = None

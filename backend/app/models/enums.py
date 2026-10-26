@@ -238,3 +238,58 @@ class ForensicsIndicatorCode(StrEnum):
     EXTERNAL_CLAIM_SIMULATED = "external_claim_simulated"
     EXTERNAL_CLAIM_UNAVAILABLE = "external_claim_unavailable"
     CLEAN_SCAN = "clean_scan"
+
+
+# ---- Phase 7: per-document three-layer statuses -------------------------------
+
+
+class RuleValidationStatus(StrEnum):
+    """Layer 1 — extraction/rules. Passing never proves authenticity."""
+
+    PENDING = "pending"
+    PASS = "pass"
+    WARNING = "warning"
+    FAIL = "fail"
+    MANUAL_REVIEW = "manual_review"
+    SKIPPED = "skipped"
+    ERROR = "error"
+    UNREADABLE = "unreadable"
+
+
+class ExternalVerificationLayerStatus(StrEnum):
+    """Layer 2 — external/local verification adapters (independent of Layer 1)."""
+
+    PENDING = "pending"
+    VERIFIED_BY_SOURCE = "verified_by_source"
+    MISMATCH_DETECTED = "mismatch_detected"
+    SOURCE_UNAVAILABLE = "source_unavailable"
+    MANUAL_VERIFICATION_REQUIRED = "manual_verification_required"
+    SIMULATED_RESULT = "simulated_result"
+    NOT_APPLICABLE = "not_applicable"
+    PARTIAL = "partial"
+    ERROR = "error"
+
+
+class DocumentReviewStatus(StrEnum):
+    """Layer 3 — human review. Independent of automated layers."""
+
+    PENDING = "pending"
+    IN_REVIEW = "in_review"
+    RESOLVED = "resolved"
+    WAIVED = "waived"
+    ACCEPTED = "accepted"
+    NOT_REQUIRED = "not_required"
+
+
+class DocumentVerificationRunStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    COMPLETED_PARTIAL = "completed_partial"
+    FAILED = "failed"
+
+
+class VerificationCheckLayer(StrEnum):
+    RULES = "layer1_rules"
+    EXTERNAL = "layer2_external"
+    REVIEW = "layer3_review"

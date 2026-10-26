@@ -7,11 +7,22 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 from app.models.application import Application
 from app.models.base import TimestampMixin, UTCDateTime, enum_type, new_id, utcnow
-from app.models.enums import DocumentStatus, ExtractionMethod, FieldReviewStatus, ValidationOutcome
+from app.models.enums import (
+    DocumentReviewStatus,
+    DocumentStatus,
+    ExtractionMethod,
+    ExternalVerificationLayerStatus,
+    FieldReviewStatus,
+    RuleValidationStatus,
+    ValidationOutcome,
+)
 
 
 class Document(Base, TimestampMixin):
-    """One logical document per (application, requirement); versions hold the files."""
+    """One logical document per (application, requirement); versions hold the files.
+
+    Phase 7 three-layer statuses are independent: Layer 1 pass never implies authenticity.
+    """
 
     __tablename__ = "documents"
     __table_args__ = (UniqueConstraint("application_id", "requirement_code", name="uq_doc_app_req"),)
@@ -26,6 +37,19 @@ class Document(Base, TimestampMixin):
         enum_type(DocumentStatus), default=DocumentStatus.UPLOADED, nullable=False
     )
     current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Latest three-layer snapshot (updated by verification pipeline; not proof of authenticity)
+    rule_validation_status: Mapped[RuleValidationStatus] = mapped_column(
+        enum_type(RuleValidationStatus), default=RuleValidationStatus.PENDING, nullable=False
+    )
+    external_verification_status: Mapped[ExternalVerificationLayerStatus] = mapped_column(
+        enum_type(ExternalVerificationLayerStatus),
+        default=ExternalVerificationLayerStatus.PENDING,
+        nullable=False,
+    )
+    review_status: Mapped[DocumentReviewStatus] = mapped_column(
+        enum_type(DocumentReviewStatus), default=DocumentReviewStatus.PENDING, nullable=False
+    )
+    latest_verification_run_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     application: Mapped[Application] = relationship(back_populates="documents")
     versions: Mapped[list["DocumentVersion"]] = relationship(

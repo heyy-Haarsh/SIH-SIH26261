@@ -24,6 +24,11 @@ REQUIREMENT_TO_CATEGORY: dict[str, SemanticDocumentCategory] = {
     "AFFILIATION": SemanticDocumentCategory.AFFILIATION,
     "BUILDING_PLAN": SemanticDocumentCategory.BUILDING,
     "FIRE_NOC": SemanticDocumentCategory.FIRE_NOC,
+    "OCCUPANCY_CERTIFICATE": SemanticDocumentCategory.BUILDING,
+    "STRUCTURAL_STABILITY": SemanticDocumentCategory.BUILDING,
+    "AICTE_PAYMENT_RECEIPT": SemanticDocumentCategory.OTHER,
+    "SATELLITE_MAP": SemanticDocumentCategory.OTHER,
+    "AUDITED_ACCOUNTS": SemanticDocumentCategory.OTHER,
 }
 
 KEYWORDS: dict[SemanticDocumentCategory, frozenset[str]] = {

@@ -1,0 +1,28 @@
+{
+  "code": "AICTE_PAYMENT_RECEIPT",
+  "requirement_code": "AICTE_PAYMENT_RECEIPT",
+  "name": "AICTE Payment Receipt",
+  "version": "v1",
+  "is_synthetic_rules": true,
+  "handbook_note": "[SYNTHETIC] Demo field rules only — not an official AICTE payment verification policy.",
+  "layer1": {
+    "required_fields": ["receipt_number", "payment_amount", "payment_date", "transaction_id"],
+    "optional_fields": ["institution_name", "payment_mode"],
+    "date_checks": [
+      {"field": "payment_date", "not_future": true, "max_age_days": 730, "ambiguous_is_manual": true}
+    ],
+    "format_checks": [
+      {"field": "payment_amount", "pattern": "^[0-9]+(\\.[0-9]{1,2})?$", "message": "Amount should be numeric"}
+    ],
+    "cross_field_checks": []
+  },
+  "layer2": {
+    "adapters": [
+      {"id": "pdf_signature", "claim_type": "digital_signature"},
+      {"id": "aicte_payment", "claim_type": "payment_receipt", "required_authorized_source": true}
+    ]
+  },
+  "layer3": {
+    "require_review_when": ["rule_fail", "external_unavailable", "external_simulated", "signature_invalid"]
+  }
+}

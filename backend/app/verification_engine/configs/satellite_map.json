@@ -1,0 +1,29 @@
+{
+  "code": "SATELLITE_MAP",
+  "requirement_code": "SATELLITE_MAP",
+  "name": "Satellite Map",
+  "version": "v1",
+  "is_synthetic_rules": true,
+  "handbook_note": "[SYNTHETIC] Demo satellite-map field rules. Geocoding uses public Nominatim when enabled; otherwise SOURCE_UNAVAILABLE.",
+  "layer1": {
+    "required_fields": ["address"],
+    "optional_fields": ["latitude", "longitude", "survey_number", "plot_number", "institution_name"],
+    "date_checks": [],
+    "format_checks": [
+      {"field": "latitude", "pattern": "^-?[0-9]{1,2}(\\.[0-9]+)?$", "optional": true, "message": "Latitude format"},
+      {"field": "longitude", "pattern": "^-?[0-9]{1,3}(\\.[0-9]+)?$", "optional": true, "message": "Longitude format"}
+    ],
+    "cross_field_checks": [
+      {"type": "both_or_neither", "fields": ["latitude", "longitude"]}
+    ]
+  },
+  "layer2": {
+    "adapters": [
+      {"id": "geocode_nominatim", "claim_type": "coordinate_consistency"},
+      {"id": "pdf_signature", "claim_type": "digital_signature"}
+    ]
+  },
+  "layer3": {
+    "require_review_when": ["rule_fail", "coordinate_mismatch", "external_unavailable"]
+  }
+}

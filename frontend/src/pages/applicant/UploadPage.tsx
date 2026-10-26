@@ -173,7 +173,12 @@ export function UploadPage() {
               <option value="LAND_OWNERSHIP">LAND_OWNERSHIP</option>
               <option value="AFFILIATION">AFFILIATION</option>
               <option value="BUILDING_PLAN">BUILDING_PLAN</option>
-              <option value="FIRE_NOC">FIRE_NOC</option>
+              <option value="FIRE_NOC">FIRE_NOC (Fire Safety)</option>
+              <option value="AICTE_PAYMENT_RECEIPT">AICTE_PAYMENT_RECEIPT</option>
+              <option value="OCCUPANCY_CERTIFICATE">OCCUPANCY_CERTIFICATE</option>
+              <option value="STRUCTURAL_STABILITY">STRUCTURAL_STABILITY</option>
+              <option value="SATELLITE_MAP">SATELLITE_MAP</option>
+              <option value="AUDITED_ACCOUNTS">AUDITED_ACCOUNTS</option>
             </Select>
           </div>
           <div>

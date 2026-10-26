@@ -19,6 +19,11 @@ KEYWORDS: dict[str, frozenset[str]] = {
     "AFFILIATION": frozenset({"affiliation", "affiliated"}),
     "BUILDING_PLAN": frozenset({"building", "plan", "blueprint"}),
     "FIRE_NOC": frozenset({"fire", "noc"}),
+    "AICTE_PAYMENT_RECEIPT": frozenset({"payment", "receipt", "challan", "transaction"}),
+    "OCCUPANCY_CERTIFICATE": frozenset({"occupancy", "completion", "formd", "buildinglicense"}),
+    "STRUCTURAL_STABILITY": frozenset({"structural", "stability", "engineer"}),
+    "SATELLITE_MAP": frozenset({"satellite", "geotag", "geotagged", "map"}),
+    "AUDITED_ACCOUNTS": frozenset({"audited", "accounts", "balance", "financial"}),
 }
 
 _TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")

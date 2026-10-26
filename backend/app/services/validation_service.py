@@ -347,6 +347,17 @@ def run_validation(
 
     packet = ReviewSupportPacketBuilder().build_packet(aggregation)
 
+    # Phase 7: per-document three-layer verification (config-driven; independent statuses)
+    from app.verification_engine.pipeline import run_for_application as run_doc_verif
+
+    doc_verif_runs = run_doc_verif(
+        db,
+        application,
+        triggered_by=actor_proxy,
+        validation_run_id=run.id,
+        commit=False,
+    )
+
     run.status = ValidationRunStatus.COMPLETED
     run.completed_at = datetime.now(timezone.utc)
 
@@ -367,6 +378,8 @@ def run_validation(
         "forensicsRunId": forensics_run.id,
         "forensicsSummary": forensics_run.summary,
         "forensicsLimitations": forensics_run.limitations,
+        "documentVerificationRunIds": [r.id for r in doc_verif_runs],
+        "documentVerificationCount": len(doc_verif_runs),
         "applicationStatus": (
             application.status.value if hasattr(application.status, "value") else str(application.status)
         ),

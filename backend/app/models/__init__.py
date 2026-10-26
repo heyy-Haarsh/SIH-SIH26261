@@ -3,6 +3,7 @@
 from app.models.application import Application
 from app.models.audit import AuditEvent
 from app.models.category import ApplicationCategory
+from app.models.doc_verification import DocumentVerificationCheck, DocumentVerificationRun
 from app.models.document import Document, DocumentVersion, ExtractedField
 from app.models.extraction import ExtractionRun
 from app.models.forensics import ForensicsEvidence, ForensicsIndicator, ForensicsRun
@@ -20,6 +21,8 @@ __all__ = [
     "AuditEvent",
     "DeficiencyNotice",
     "Document",
+    "DocumentVerificationCheck",
+    "DocumentVerificationRun",
     "DocumentVersion",
     "ExtractedField",
     "ExtractionRun",

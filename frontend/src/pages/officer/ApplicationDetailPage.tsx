@@ -86,6 +86,9 @@ export function ApplicationDetailPage() {
   const [clarifyBody, setClarifyBody] = useState('')
   const [decisionReason, setDecisionReason] = useState('')
   const [deficiencyResponses, setDeficiencyResponses] = useState<Record<string, string>>({})
+  const [docVerifBusy, setDocVerifBusy] = useState(false)
+  const [docVerifMsg, setDocVerifMsg] = useState<string | null>(null)
+  const [docVerifReason, setDocVerifReason] = useState<Record<string, string>>({})
   const roleLabel =
     role === 'officer' ? 'Scrutiny Officer' : role === 'applicant' ? 'Applicant' : 'Administrator'
   const listPath = role === 'applicant' ? '/applicant/applications' : '/officer/queue'
@@ -363,7 +366,11 @@ export function ApplicationDetailPage() {
                     i.riskClass === 'possible_duplicate',
                 ).length,
               },
-              { id: 'verify', label: 'Verification' },
+              {
+                id: 'verify',
+                label: 'Verification',
+                count: (detail.documentVerificationRuns ?? []).length || undefined,
+              },
               {
                 id: 'review',
                 label: 'Clarifications & audit',
@@ -429,13 +436,22 @@ export function ApplicationDetailPage() {
                           {doc.fileName} · v{doc.version} · {formatBytes(doc.sizeBytes)} ·{' '}
                           {formatDate(doc.uploadedAt)}
                         </div>
-                        {doc.extractionStatus && (
-                          <div className="mt-1 flex flex-wrap gap-1">
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {doc.extractionStatus && (
                             <Badge tone="info">{doc.extractionStatus}</Badge>
-                            {doc.contentKind && <Badge tone="neutral">{doc.contentKind}</Badge>}
-                            {doc.categoryMismatch && <Badge tone="warning">category mismatch</Badge>}
-                          </div>
-                        )}
+                          )}
+                          {doc.contentKind && <Badge tone="neutral">{doc.contentKind}</Badge>}
+                          {doc.categoryMismatch && <Badge tone="warning">category mismatch</Badge>}
+                          {doc.ruleValidationStatus && (
+                            <Badge tone="warning">L1 {doc.ruleValidationStatus}</Badge>
+                          )}
+                          {doc.externalVerificationStatus && (
+                            <Badge tone="info">L2 {doc.externalVerificationStatus}</Badge>
+                          )}
+                          {doc.reviewStatus && (
+                            <Badge tone="neutral">L3 {doc.reviewStatus}</Badge>
+                          )}
+                        </div>
                       </div>
                       <OutcomeBadge outcome={doc.status} />
                     </button>
@@ -918,26 +934,179 @@ export function ApplicationDetailPage() {
           )}
 
           {tab === 'verify' && (
-            <div className="space-y-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
-                <Plug size={16} /> External verification status
-              </div>
-              {detail.verifications.map((v) => (
-                <div
-                  key={v.id}
-                  className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-border p-4 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div>
-                    <div className="text-sm font-medium text-ink">{v.claim}</div>
-                    <p className="mt-1 text-xs text-ink-secondary">{v.detail}</p>
-                    <div className="mt-2 text-[11px] text-ink-muted">
-                      Source type: {v.source.replace(/_/g, ' ')} · Checked:{' '}
-                      {formatDateTime(v.checkedAt)}
-                    </div>
-                  </div>
-                  <VerificationBadge status={v.status} />
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <Plug size={16} /> Three-layer document verification
                 </div>
-              ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={docVerifBusy}
+                  leftIcon={<RefreshCw size={14} />}
+                  onClick={async () => {
+                    setDocVerifBusy(true)
+                    setDocVerifMsg(null)
+                    try {
+                      const runs = await api.runApplicationDocVerification(role, detail.id)
+                      setDocVerifMsg(
+                        `Ran verification for ${runs.length} configured document(s). Layer 1 pass ≠ authenticity.`,
+                      )
+                      await reload()
+                    } catch (err) {
+                      setDocVerifMsg(err instanceof Error ? err.message : 'Verification failed')
+                    } finally {
+                      setDocVerifBusy(false)
+                    }
+                  }}
+                >
+                  {docVerifBusy ? 'Running…' : 'Run document verification'}
+                </Button>
+              </div>
+              <p className="text-xs text-ink-muted">
+                Each Phase 7 document keeps independent statuses: rule validation, external
+                verification, and review. Authorized payment/building/fire/engineer/auditor
+                connectors are not configured — they return SOURCE_UNAVAILABLE (not simulated as
+                verified). Geocoding uses Nominatim only when enabled.
+              </p>
+              {docVerifMsg && (
+                <div className="rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-xs text-ink-secondary">
+                  {docVerifMsg}
+                </div>
+              )}
+
+              {(detail.documentVerificationRuns ?? []).length === 0 && (
+                <EmptyState
+                  icon={Plug}
+                  title="No document verification runs yet"
+                  description="Upload a Phase 7 document type (payment, occupancy, structural, fire, satellite, audited accounts), then run verification or validation."
+                />
+              )}
+
+              {(detail.documentVerificationRuns ?? []).map((run) => {
+                const doc = detail.documents.find((d) => d.id === run.documentId)
+                return (
+                  <div key={run.id} className="rounded-[var(--radius-md)] border border-border p-4">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-ink">
+                        {doc?.name ?? run.configCode}
+                      </span>
+                      <Badge tone="info">{run.configCode}</Badge>
+                      <Badge tone="neutral">v{run.configVersion}</Badge>
+                    </div>
+                    <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
+                      <Badge tone="warning">rules: {run.ruleValidationStatus}</Badge>
+                      <Badge tone="info">external: {run.externalVerificationStatus}</Badge>
+                      <Badge tone="neutral">review: {run.reviewStatus}</Badge>
+                    </div>
+                    {(run.limitations ?? []).length > 0 && (
+                      <ul className="mb-2 list-disc pl-4 text-[11px] text-ink-muted">
+                        {(run.limitations ?? []).slice(0, 4).map((l) => (
+                          <li key={l}>{l}</li>
+                        ))}
+                      </ul>
+                    )}
+                    <ul className="space-y-2">
+                      {run.checks.map((c) => (
+                        <li key={c.id} className="rounded border border-border px-3 py-2 text-xs">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-ink">{c.title}</span>
+                            <Badge tone="neutral">{c.layer.replace(/_/g, ' ')}</Badge>
+                            <Badge
+                              tone={
+                                c.outcome === 'pass' || c.outcome === 'verified_by_source'
+                                  ? 'pass'
+                                  : c.outcome === 'fail' || c.outcome === 'mismatch_detected'
+                                    ? 'failed'
+                                    : 'warning'
+                              }
+                            >
+                              {c.outcome}
+                            </Badge>
+                            {c.isSyntheticRule && <Badge tone="info">synthetic</Badge>}
+                            <span className="text-ink-muted">{c.source.replace(/_/g, ' ')}</span>
+                          </div>
+                          <p className="text-ink-secondary">{c.detail}</p>
+                          {c.status === 'open' &&
+                            (role === 'officer' || role === 'admin') &&
+                            c.outcome !== 'pass' &&
+                            c.outcome !== 'verified_by_source' && (
+                              <div className="mt-2 space-y-2 border-t border-border pt-2">
+                                <Textarea
+                                  rows={2}
+                                  placeholder="Resolution reason…"
+                                  value={docVerifReason[c.id] ?? ''}
+                                  onChange={(e) =>
+                                    setDocVerifReason((prev) => ({
+                                      ...prev,
+                                      [c.id]: e.target.value,
+                                    }))
+                                  }
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                  {(['resolved', 'waived', 'accepted'] as const).map((st) => (
+                                    <Button
+                                      key={st}
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={docVerifBusy}
+                                      onClick={async () => {
+                                        const reason = (docVerifReason[c.id] ?? '').trim()
+                                        if (reason.length < 5) {
+                                          setDocVerifMsg('Enter a resolution reason (min 5 chars).')
+                                          return
+                                        }
+                                        setDocVerifBusy(true)
+                                        try {
+                                          await api.resolveDocVerificationCheck(role, c.id, {
+                                            status: st,
+                                            reason,
+                                          })
+                                          setDocVerifMsg(`Check ${st}.`)
+                                          await reload()
+                                        } catch (err) {
+                                          setDocVerifMsg(
+                                            err instanceof Error ? err.message : 'Resolve failed',
+                                          )
+                                        } finally {
+                                          setDocVerifBusy(false)
+                                        }
+                                      }}
+                                    >
+                                      {st}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+
+              <div className="border-t border-border pt-4">
+                <div className="mb-2 text-sm font-semibold text-ink">
+                  Application-level verification claims
+                </div>
+                {detail.verifications.map((v) => (
+                  <div
+                    key={v.id}
+                    className="mb-2 flex flex-col gap-2 rounded-[var(--radius-md)] border border-border p-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-ink">{v.claim}</div>
+                      <p className="mt-1 text-xs text-ink-secondary">{v.detail}</p>
+                      <div className="mt-2 text-[11px] text-ink-muted">
+                        Source type: {v.source.replace(/_/g, ' ')} · Checked:{' '}
+                        {formatDateTime(v.checkedAt)}
+                      </div>
+                    </div>
+                    <VerificationBadge status={v.status} />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
