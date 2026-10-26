@@ -54,12 +54,23 @@ class Settings(BaseSettings):
     celery_broker_url: str = ""
 
     # AI / external verification (none are implemented as live integrations)
+    # ENABLE_AI_EXTRACTION only gates optional LLM-based extraction — never local PDF/OCR/deterministic fields.
     llm_api_key: str = ""
     llm_provider: str = ""
     enable_ai_extraction: bool = False
     aicte_api_base_url: str = ""
     aicte_api_key: str = ""
     enable_live_verification: bool = False
+
+    # Document intelligence (local; no cloud required)
+    enable_local_pdf_extraction: bool = True
+    enable_local_ocr: bool = True
+    ocr_languages: str = "eng"  # comma-separated Tesseract langs; hi/mr can be added later
+    ocr_dpi: int = 200
+    max_extraction_pages: int = 50
+    extraction_timeout_seconds: int = 120
+    low_field_confidence_threshold: float = 0.55
+    auto_extract_on_upload: bool = True
 
     # ---- derived helpers -------------------------------------------------
     @property

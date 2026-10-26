@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, FilePlus2, FolderOpen, Upload } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
@@ -6,18 +7,39 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { ApplicationTable } from '@/components/applications/ApplicationTable'
-import { APPLICANT_APPLICATIONS } from '@/mocks/demoData'
+import { api, ApiError } from '@/services/api'
 import { useRole } from '@/app/RoleContext'
+import type { ApplicationSummary } from '@/types'
 
 export function ApplicantDashboard() {
-  const { user } = useRole()
-  const apps = APPLICANT_APPLICATIONS
+  const { user, role } = useRole()
+  const [apps, setApps] = useState<ApplicationSummary[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api
+      .listApplications(role)
+      .then(setApps)
+      .catch((err) => {
+        setError(
+          err instanceof ApiError
+            ? `API (${err.status}): ${err.message}`
+            : 'Backend unreachable — start the API on port 8000.',
+        )
+      })
+  }, [role])
 
   return (
     <AppShell title="Institution Dashboard" breadcrumbs={['Applicant', 'Dashboard']}>
       <DemoBanner>
-        {`Applicant workspace for ${user.institutionName ?? 'your institution'}. Demo data only — not a live AICTE portal.`}
+        {`Applicant workspace for ${user.institutionName ?? 'your institution'}. Live API data when the backend is running.`}
       </DemoBanner>
+
+      {error && (
+        <div className="mb-4 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {error}
+        </div>
+      )}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="My applications" value={apps.length} icon={FolderOpen} />
@@ -31,7 +53,11 @@ export function ApplicantDashboard() {
           value={apps.filter((a) => a.status === 'awaiting_review').length}
           icon={CheckCircle2}
         />
-        <StatCard label="Documents pending" value={2} hint="Checklist items" icon={Upload} />
+        <StatCard
+          label="Needs manual review"
+          value={apps.filter((a) => a.requiresManualReview).length}
+          icon={Upload}
+        />
       </div>
 
       <div className="mb-5 flex flex-wrap gap-2">

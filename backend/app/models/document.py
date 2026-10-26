@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.models.application import Application
 from app.models.base import TimestampMixin, UTCDateTime, enum_type, new_id, utcnow
-from app.models.enums import DocumentStatus, ExtractionMethod, ValidationOutcome
+from app.models.enums import DocumentStatus, ExtractionMethod, FieldReviewStatus, ValidationOutcome
 
 
 class Document(Base, TimestampMixin):
@@ -70,10 +70,16 @@ class DocumentVersion(Base):
     extracted_fields: Mapped[list["ExtractedField"]] = relationship(
         back_populates="document_version", cascade="all, delete-orphan"
     )
+    extraction_runs: Mapped[list["ExtractionRun"]] = relationship(  # noqa: F821
+        back_populates="document_version", cascade="all, delete-orphan"
+    )
 
 
 class ExtractedField(Base):
+    """Field extracted from a document version, optionally tied to an extraction run."""
+
     __tablename__ = "extracted_fields"
+    __table_args__ = (Index("ix_extracted_fields_run_name", "extraction_run_id", "field_name"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     document_version_id: Mapped[str] = mapped_column(
@@ -82,15 +88,39 @@ class ExtractedField(Base):
     application_id: Mapped[str] = mapped_column(
         ForeignKey("applications.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    extraction_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="CASCADE"), index=True, nullable=True
+    )
     field_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Display value (prefer normalized when safe)
     value: Mapped[str] = mapped_column(Text, nullable=False)
-    # None when the value came from deterministic parsing rather than a scored model.
+    raw_value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    normalized_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Field-extraction confidence only when the method supplies a defensible score; never fabricated for regex.
     confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    page_reference: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    ocr_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    page_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    page_reference: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Bounding box in PDF page coordinate space (origin top-left of page, units = PDF points).
+    # Convention documented in docs/EXTRACTION.md. Null when location unknown — never fabricated.
+    bbox_x0: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    bbox_y0: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    bbox_x1: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    bbox_y1: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    coordinate_space: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     method: Mapped[ExtractionMethod] = mapped_column(
         enum_type(ExtractionMethod), default=ExtractionMethod.TEXT_KEY_VALUE, nullable=False
     )
+    review_status: Mapped[FieldReviewStatus] = mapped_column(
+        enum_type(FieldReviewStatus), default=FieldReviewStatus.PENDING, nullable=False
+    )
     corrected_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_conflict: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    candidate_values: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
     document_version: Mapped[DocumentVersion] = relationship(back_populates="extracted_fields")
+    extraction_run: Mapped[Optional["ExtractionRun"]] = relationship(  # noqa: F821
+        back_populates="fields"
+    )

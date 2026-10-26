@@ -101,9 +101,8 @@ require_any_role = require_roles(UserRole.APPLICANT, UserRole.OFFICER, UserRole.
 
 
 def can_access_application(user: User, application: Application) -> bool:
-    """Read access: applicants only for their own institution; officers for all; admins none
-    (admins reach application audit trails through the audit-specific checks)."""
-    if user.role == UserRole.OFFICER:
+    """Read access: applicants only for their own institution; officers and admins for all."""
+    if user.role in (UserRole.OFFICER, UserRole.ADMIN):
         return True
     if user.role == UserRole.APPLICANT:
         return user.institution_id is not None and user.institution_id == application.institution_id

@@ -50,6 +50,19 @@ JSON responses use **camelCase** field names.
 }
 ```
 
+## Extraction
+
+| Method | Path | Roles | Notes |
+|--------|------|-------|-------|
+| POST | `/documents/{id}/extraction-runs` | applicant, officer, admin | Body: `{force, run_validation_after}` |
+| GET | `/documents/{id}/extraction-runs/latest` | any authenticated | Latest run + fields |
+| GET | `/extraction-runs/{runId}` | any authenticated (resource-scoped) | |
+| GET | `/extraction-runs/{runId}/fields` | any authenticated (resource-scoped) | |
+| POST | `/extracted-fields/{fieldId}/corrections` | officer, admin | Body: `{corrected_value}` |
+| GET | `/extraction/ocr-capability` | any authenticated | Truthful Tesseract status |
+
+Upload response may include `extractionRunId` and `extractionStatus` when `AUTO_EXTRACT_ON_UPLOAD=true`.
+
 ## Admin
 
 | Method | Path | Roles |

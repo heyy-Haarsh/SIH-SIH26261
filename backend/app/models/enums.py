@@ -106,5 +106,50 @@ class ReviewDecisionType(StrEnum):
 class ExtractionMethod(StrEnum):
     FILENAME_METADATA = "filename_metadata"
     TEXT_KEY_VALUE = "text_key_value"
+    PDF_TEXT = "pdf_text"
+    OCR = "ocr"
+    REGEX = "regex"
     MANUAL = "manual"
-    AI_MODEL = "ai_model"  # reserved - not implemented
+    AI_MODEL = "ai_model"  # reserved — ENABLE_AI_EXTRACTION only; not required for local extraction
+
+
+class ExtractionRunStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"
+    REQUIRES_OCR = "requires_ocr"
+    OCR_UNAVAILABLE = "ocr_unavailable"
+    UNSUPPORTED = "unsupported"
+    FAILED = "failed"
+    REQUIRES_MANUAL_REVIEW = "requires_manual_review"
+
+
+class DocumentContentKind(StrEnum):
+    DIGITAL_PDF = "digital_pdf"
+    SCANNED_PDF = "scanned_pdf"
+    MIXED_PDF = "mixed_pdf"
+    IMAGE = "image"
+    TEXT = "text"
+    DOCX = "docx"
+    UNSUPPORTED = "unsupported"
+    UNREADABLE = "unreadable"
+
+
+class SemanticDocumentCategory(StrEnum):
+    LAND_OR_LEASE = "land_or_lease"
+    FIRE_NOC = "fire_noc"
+    BUILDING = "building"
+    TRUST_OR_SOCIETY = "trust_or_society"
+    AFFIDAVIT = "affidavit"
+    AFFILIATION = "affiliation"
+    OTHER = "other"
+    UNKNOWN = "unknown"
+
+
+class FieldReviewStatus(StrEnum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    CORRECTED = "corrected"
+    REJECTED = "rejected"
+    CONFLICT = "conflict"

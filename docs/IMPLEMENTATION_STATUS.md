@@ -15,17 +15,22 @@
 - Mock / local verification adapters with truthful statuses
 - Alembic project layout; `create_all` + seed on startup for local demo
 - Backend pytest suite; frontend typecheck/build scripts
+- **Phase 2 document intelligence:** inspect → classify → PDF text (PyMuPDF) → OCR (Tesseract when installed) → deterministic fields → evidence mapping → extraction runs → validation
+- Extraction APIs, OCR capability probe, Alembic migration `20261026_0001`
+- Frontend detail page loads live API extraction fields (mock only for synthetic demo IDs)
 
 ## Mock / demo only
 
 - Dashboard queue statistics (`frontend/src/mocks`)
-- Rich application detail narrative data for IDs like `app-1001` in the UI mock layer
+- Rich application detail narrative data for IDs like `app-1001` in the UI mock layer when API has no row
 - Demo role switcher (not real authentication)
 - Synthetic regulatory rules (not official AICTE APH clauses)
 
 ## Not yet implemented / unavailable by design
 
-- Real OCR / LLM extraction (`ENABLE_AI_EXTRACTION=false`)
+- LLM extraction (`ENABLE_AI_EXTRACTION` reserved; local PDF/OCR work without it)
+- Full DOCX structured extraction
+- In-viewer bounding-box highlighting (page refs work; boxes stored for later)
 - ML document classification
 - Document forensics / tamper analysis
 - Live AICTE or issuing-authority connectors

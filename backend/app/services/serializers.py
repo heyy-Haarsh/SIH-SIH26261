@@ -79,11 +79,33 @@ def application_summary(db: Session, app: Application) -> ApplicationSummaryOut:
     )
 
 
-def document_to_out(doc: Document) -> DocumentOut:
+def document_to_out(doc: Document, db: Session | None = None) -> DocumentOut:
     version = doc.latest_version
     outcome = "pending"
+    extraction_status = None
+    content_kind = None
+    predicted = None
+    selected = doc.requirement_code
+    mismatch = False
+    run_id = None
     if version is not None:
         outcome = _enum_val(version.validation_outcome)
+        if db is not None:
+            from app.models.extraction import ExtractionRun
+
+            run = (
+                db.query(ExtractionRun)
+                .filter(ExtractionRun.document_version_id == version.id)
+                .order_by(ExtractionRun.created_at.desc())
+                .first()
+            )
+            if run:
+                extraction_status = _enum_val(run.status)
+                content_kind = _enum_val(run.content_kind)
+                predicted = _enum_val(run.predicted_category)
+                selected = run.selected_category or doc.requirement_code
+                mismatch = bool(run.category_mismatch)
+                run_id = run.id
     return DocumentOut(
         id=doc.id,
         name=doc.name,
@@ -95,6 +117,12 @@ def document_to_out(doc: Document) -> DocumentOut:
         version=doc.current_version,
         status=outcome,
         page_count=version.page_count if version else None,
+        extraction_status=extraction_status,
+        content_kind=content_kind,
+        predicted_category=predicted,
+        selected_category=selected,
+        category_mismatch=mismatch,
+        latest_extraction_run_id=run_id,
     )
 
 
@@ -117,15 +145,35 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
     for doc in app.documents:
         for version in doc.versions:
             for ef in version.extracted_fields:
+                bbox = None
+                if ef.bbox_x0 is not None and ef.bbox_y0 is not None:
+                    bbox = {
+                        "x0": ef.bbox_x0,
+                        "y0": ef.bbox_y0,
+                        "x1": ef.bbox_x1 or ef.bbox_x0,
+                        "y1": ef.bbox_y1 or ef.bbox_y0,
+                    }
                 extracted.append(
                     ExtractedFieldOut(
                         id=ef.id,
                         field_name=ef.field_name,
-                        value=ef.value,
+                        value=ef.corrected_value or ef.value,
+                        raw_value=ef.raw_value or ef.value,
+                        normalized_value=ef.normalized_value,
                         confidence=ef.confidence,
+                        ocr_confidence=ef.ocr_confidence,
+                        page_number=ef.page_number,
                         page_reference=ef.page_reference,
+                        bbox=bbox,
+                        coordinate_space=ef.coordinate_space,
+                        method=_enum_val(ef.method) if ef.method else None,
+                        review_status=_enum_val(ef.review_status) if ef.review_status else None,
+                        is_conflict=bool(ef.is_conflict),
+                        candidate_values=list(ef.candidate_values or []),
+                        unit=ef.unit,
                         source_document_id=doc.id,
                         source_document_name=version.file_name,
+                        extraction_run_id=ef.extraction_run_id,
                         corrected_value=ef.corrected_value,
                     )
                 )
@@ -166,7 +214,7 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
         program_name=app.program_name,
         contact_email=app.contact_email,
         requirements=requirements,
-        documents=[document_to_out(d) for d in app.documents],
+        documents=[document_to_out(d, db) for d in app.documents],
         extracted_fields=extracted,
         findings=[finding_to_out(f) for f in findings],
         discrepancies=[],

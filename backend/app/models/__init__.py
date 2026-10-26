@@ -4,6 +4,7 @@ from app.models.application import Application
 from app.models.audit import AuditEvent
 from app.models.category import ApplicationCategory
 from app.models.document import Document, DocumentVersion, ExtractedField
+from app.models.extraction import ExtractionRun
 from app.models.review import DeficiencyNotice, ReviewDecision
 from app.models.rule import RegulatoryRule, RuleVersion
 from app.models.user import Institution, User
@@ -18,6 +19,7 @@ __all__ = [
     "Document",
     "DocumentVersion",
     "ExtractedField",
+    "ExtractionRun",
     "Finding",
     "FindingEvidence",
     "Institution",

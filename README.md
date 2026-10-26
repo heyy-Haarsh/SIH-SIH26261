@@ -100,6 +100,19 @@ No additional application roles are defined.
 - [Architecture](docs/ARCHITECTURE.md)
 - [API contracts](docs/API_CONTRACTS.md)
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [Document extraction / OCR](docs/EXTRACTION.md)
+
+### Optional OCR (scanned PDFs / images)
+
+```bash
+# Install Tesseract OCR for your OS and ensure it is on PATH
+# Then in the backend venv:
+pip install pymupdf pillow pytesseract
+```
+
+Probe availability: `GET /api/v1/extraction/ocr-capability` (with demo auth headers).
+
+Digital PDF text extraction works with PyMuPDF alone; OCR is optional.
 
 ## Security reminders
 

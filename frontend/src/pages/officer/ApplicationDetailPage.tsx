@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   FileText,
@@ -9,6 +9,7 @@ import {
   Plug,
   GitCompare,
   Shield,
+  RefreshCw,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { DemoBanner } from '@/components/dashboard/DemoBanner'
@@ -24,20 +25,31 @@ import {
   PriorityBadge,
   VerificationBadge,
 } from '@/components/ui/StatusBadge'
-import { getDemoApplicationDetail } from '@/mocks/demoData'
 import { confidenceLabel, formatBytes, formatDate, formatDateTime } from '@/lib/format'
 import { useRole } from '@/app/RoleContext'
+import { useApplicationDetail } from '@/hooks/useApplicationDetail'
+import { api } from '@/services/api'
 
 export function ApplicationDetailPage() {
   const { id } = useParams()
   const { role } = useRole()
-  const detail = useMemo(() => (id ? getDemoApplicationDetail(id) : undefined), [id])
+  const { detail, source, loading, error } = useApplicationDetail(id)
   const [tab, setTab] = useState('overview')
   const [note, setNote] = useState('')
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
+  const [extractBusy, setExtractBusy] = useState(false)
+  const [extractMsg, setExtractMsg] = useState<string | null>(null)
   const roleLabel =
     role === 'officer' ? 'Scrutiny Officer' : role === 'applicant' ? 'Applicant' : 'Administrator'
   const listPath = role === 'applicant' ? '/applicant/applications' : '/officer/queue'
+
+  if (loading) {
+    return (
+      <AppShell title="Loading…" breadcrumbs={[roleLabel, 'Applications']}>
+        <p className="text-sm text-ink-muted">Loading application…</p>
+      </AppShell>
+    )
+  }
 
   if (!detail) {
     return (
@@ -45,7 +57,7 @@ export function ApplicationDetailPage() {
         <EmptyState
           icon={FileText}
           title="Application not found"
-          description="This demo ID is not in the synthetic dataset."
+          description={error ?? 'No matching application in the API or demo dataset.'}
           action={
             <Link to={listPath}>
               <Button variant="outline">Back to list</Button>
@@ -84,9 +96,9 @@ export function ApplicationDetailPage() {
       }
     >
       <DemoBanner>
-        This application detail view uses synthetic demo data. Findings cite synthetic rule IDs
-        (SYN-RULE-*) and are not official AICTE determinations. External verification uses a
-        development mock adapter unless a live connector is configured.
+        {source === 'api'
+          ? 'Live API data. Extracted fields and statuses come from the document-intelligence pipeline. Findings may cite synthetic demo rules (SYN-RULE-*) and are not official AICTE determinations.'
+          : 'Synthetic demo data (mock layer). Switch to an API-created application to see real extraction results. Findings cite SYN-RULE-* placeholders — not official AICTE determinations.'}
       </DemoBanner>
 
       <div className="mb-5 grid gap-4 lg:grid-cols-3">
@@ -209,6 +221,13 @@ export function ApplicationDetailPage() {
                           {doc.fileName} · v{doc.version} · {formatBytes(doc.sizeBytes)} ·{' '}
                           {formatDate(doc.uploadedAt)}
                         </div>
+                        {doc.extractionStatus && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <Badge tone="info">{doc.extractionStatus}</Badge>
+                            {doc.contentKind && <Badge tone="neutral">{doc.contentKind}</Badge>}
+                            {doc.categoryMismatch && <Badge tone="warning">category mismatch</Badge>}
+                          </div>
+                        )}
                       </div>
                       <OutcomeBadge outcome={doc.status} />
                     </button>
@@ -221,14 +240,43 @@ export function ApplicationDetailPage() {
                     {activeDoc ? activeDoc.fileName : 'No document selected'}
                   </div>
                   <p className="mt-1 text-xs text-ink-muted">
-                    Document preview placeholder — binary preview will connect to private object
-                    storage when configured. Original files are preserved separately from
-                    extractions and annotations.
+                    Preview placeholder — page references from extraction are listed in Extracted
+                    fields. Bounding-box highlight in the viewer is not wired in this build; page
+                    numbers are authoritative.
                   </p>
                   {activeDoc?.pageCount && (
                     <p className="mt-2 text-[11px] text-ink-secondary">
                       {activeDoc.pageCount} page(s) · {activeDoc.mimeType}
                     </p>
+                  )}
+                  {activeDoc && source === 'api' && (
+                    <div className="mt-3 flex flex-col items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<RefreshCw size={14} />}
+                        disabled={extractBusy}
+                        onClick={async () => {
+                          setExtractBusy(true)
+                          setExtractMsg(null)
+                          try {
+                            const run = await api.startExtraction(role, activeDoc.id, true)
+                            setExtractMsg(
+                              `Extraction ${run.status} · kind=${run.contentKind} · fields=${run.fields?.length ?? 0}`,
+                            )
+                          } catch (e) {
+                            setExtractMsg(e instanceof Error ? e.message : 'Extraction failed')
+                          } finally {
+                            setExtractBusy(false)
+                          }
+                        }}
+                      >
+                        {extractBusy ? 'Extracting…' : 'Re-run extraction'}
+                      </Button>
+                      {extractMsg && (
+                        <p className="text-[11px] text-ink-secondary">{extractMsg}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -236,31 +284,78 @@ export function ApplicationDetailPage() {
           )}
 
           {tab === 'extracted' && (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs uppercase text-ink-muted">
-                    <th className="px-2 py-2">Field</th>
-                    <th className="px-2 py-2">Value</th>
-                    <th className="px-2 py-2">Source</th>
-                    <th className="px-2 py-2">Page</th>
-                    <th className="px-2 py-2">Confidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detail.extractedFields.map((field) => (
-                    <tr key={field.id} className="border-b border-border">
-                      <td className="px-2 py-2.5 font-medium text-ink">{field.fieldName}</td>
-                      <td className="px-2 py-2.5 text-ink-secondary">{field.value}</td>
-                      <td className="px-2 py-2.5 text-ink-muted">{field.sourceDocumentName}</td>
-                      <td className="px-2 py-2.5 text-ink-muted">{field.pageReference ?? '—'}</td>
-                      <td className="px-2 py-2.5 text-ink-muted">
-                        {confidenceLabel(field.confidence)}
-                      </td>
+            <div className="space-y-4">
+              {detail.documents.some((d) => d.categoryMismatch) && (
+                <div className="rounded-[var(--radius-md)] border border-amber-200 bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
+                  Potential document-type mismatch detected for one or more uploads (selected vs
+                  predicted category). This is not labeled as fraud — review required.
+                </div>
+              )}
+              {source === 'mock' && (
+                <p className="text-xs text-ink-muted">
+                  Showing mock extracted fields. API-backed applications show pipeline results only.
+                </p>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[880px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-xs uppercase text-ink-muted">
+                      <th className="px-2 py-2">Field</th>
+                      <th className="px-2 py-2">Value</th>
+                      <th className="px-2 py-2">Raw</th>
+                      <th className="px-2 py-2">Source</th>
+                      <th className="px-2 py-2">Page</th>
+                      <th className="px-2 py-2">Method</th>
+                      <th className="px-2 py-2">Confidence</th>
+                      <th className="px-2 py-2">Review</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {detail.extractedFields.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-2 py-6 text-center text-ink-muted">
+                          No extracted fields yet. Upload a document or run extraction.
+                        </td>
+                      </tr>
+                    )}
+                    {detail.extractedFields.map((field) => (
+                      <tr key={field.id} className="border-b border-border">
+                        <td className="px-2 py-2.5 font-medium text-ink">
+                          {field.fieldName}
+                          {field.isConflict && (
+                            <Badge tone="warning" className="ml-1">
+                              conflict
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5 text-ink-secondary">
+                          {field.value}
+                          {field.correctedValue && (
+                            <div className="text-[10px] text-status-manual">
+                              Corrected: {field.correctedValue}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5 text-ink-muted">{field.rawValue ?? '—'}</td>
+                        <td className="px-2 py-2.5 text-ink-muted">{field.sourceDocumentName}</td>
+                        <td className="px-2 py-2.5 text-ink-muted">
+                          {field.pageReference ?? (field.pageNumber ? `p.${field.pageNumber}` : '—')}
+                        </td>
+                        <td className="px-2 py-2.5 text-ink-muted">{field.method ?? '—'}</td>
+                        <td className="px-2 py-2.5 text-ink-muted">
+                          {confidenceLabel(field.confidence)}
+                          {field.ocrConfidence != null && (
+                            <div className="text-[10px]">
+                              OCR: {Math.round(field.ocrConfidence * 100)}%
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5 text-ink-muted">{field.reviewStatus ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

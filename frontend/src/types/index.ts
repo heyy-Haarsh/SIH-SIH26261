@@ -93,17 +93,57 @@ export interface DocumentItem {
   version: number
   status: ValidationOutcome
   pageCount?: number
+  extractionStatus?: string | null
+  contentKind?: string | null
+  predictedCategory?: string | null
+  selectedCategory?: string | null
+  categoryMismatch?: boolean
+  latestExtractionRunId?: string | null
 }
 
 export interface ExtractedField {
   id: string
   fieldName: string
   value: string
+  rawValue?: string | null
+  normalizedValue?: string | null
   confidence: number | null
+  ocrConfidence?: number | null
+  pageNumber?: number | null
   pageReference: string | null
+  bbox?: { x0: number; y0: number; x1: number; y1: number } | null
+  coordinateSpace?: string | null
+  method?: string | null
+  reviewStatus?: string | null
+  isConflict?: boolean
+  candidateValues?: unknown[]
+  unit?: string | null
   sourceDocumentId: string
   sourceDocumentName: string
+  extractionRunId?: string | null
   correctedValue?: string
+}
+
+export interface ExtractionRun {
+  id: string
+  documentVersionId: string
+  applicationId: string
+  validationRunId?: string | null
+  status: string
+  contentKind: string
+  selectedCategory?: string | null
+  predictedCategory: string
+  categoryConfidence?: number | null
+  categoryMethod?: string
+  categoryMismatch: boolean
+  warnings: string[]
+  errorCode?: string | null
+  errorMessage?: string | null
+  ocrAvailable: boolean
+  pageCount?: number | null
+  pagesWithText: number
+  pagesOcr: number
+  fields: ExtractedField[]
 }
 
 export interface FindingEvidence {

@@ -9,3 +9,6 @@ pytest
 httpx
 python-dotenv
 email-validator
+pymupdf
+pillow
+pytesseract

@@ -70,16 +70,34 @@ class DocumentOut(CamelModel):
     version: int
     status: str
     page_count: int | None = None
+    extraction_status: str | None = None
+    content_kind: str | None = None
+    predicted_category: str | None = None
+    selected_category: str | None = None
+    category_mismatch: bool = False
+    latest_extraction_run_id: str | None = None
 
 
 class ExtractedFieldOut(CamelModel):
     id: str
     field_name: str
     value: str
+    raw_value: str | None = None
+    normalized_value: str | None = None
     confidence: float | None
+    ocr_confidence: float | None = None
+    page_number: int | None = None
     page_reference: str | None
+    bbox: dict[str, float] | None = None
+    coordinate_space: str | None = None
+    method: str | None = None
+    review_status: str | None = None
+    is_conflict: bool = False
+    candidate_values: list[dict[str, Any]] = Field(default_factory=list)
+    unit: str | None = None
     source_document_id: str
     source_document_name: str
+    extraction_run_id: str | None = None
     corrected_value: str | None = None
 
 
@@ -163,6 +181,8 @@ class ValidationRunOut(CamelModel):
 
 class UploadResultOut(CamelModel):
     document_id: str
-    validation_run_id: str
+    validation_run_id: str | None = None
+    extraction_run_id: str | None = None
+    extraction_status: str | None = None
     findings: list[FindingOut] = Field(default_factory=list)
     file_checks: dict[str, Any]

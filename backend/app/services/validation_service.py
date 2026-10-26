@@ -5,36 +5,43 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.document_processing.aggregator import FindingAggregator
+from app.core.seed import DEFAULT_DOCS
+from app.document_processing.aggregator import FindingAggregator, ReviewSupportPacketBuilder
 from app.document_processing.classifier import NameBasedClassifier
-from app.document_processing.extraction import BasicNormalizationModule, LocalExtractionModule
 from app.document_processing.forensics import UnavailableForensicsModule
 from app.document_processing.reconciliation import BasicReconciliationModule
 from app.document_processing.types import (
+    ClassificationResult,
     EvalContext,
     EvalDocument,
+    EvidenceDraft,
     FieldRecord,
     FileWarning,
+    FindingDraft,
     ModuleResult,
+    ModuleStatus,
 )
 from app.integrations.base import VerificationClaim, VerificationSource, VerificationStatus
 from app.integrations.registry import get_verification_adapter
 from app.models.application import Application
-from app.models.document import Document
-from app.models.enums import FindingStatus, ValidationRunStatus
 from app.models.base import utcnow
+from app.models.document import Document, ExtractedField
+from app.models.enums import FindingSeverity, FindingStatus, ValidationOutcome, ValidationRunStatus
+from app.models.extraction import ExtractionRun
 from app.models.validation import Finding, FindingEvidence, ValidationRun
 from app.models.verification import VerificationRequest
 from app.rules.engine import ENGINE_VERSION, RULESET_VERSION, RuleEngine
 from app.services.audit_service import record_audit
-from app.core.seed import DEFAULT_DOCS
 
 
-def _persist_finding(db: Session, application_id: str, run_id: str, draft) -> Finding:
+def _persist_finding(
+    db: Session, application_id: str, run_id: str, draft, *, extraction_run_id: str | None = None
+) -> Finding:
     finding = Finding(
         application_id=application_id,
         validation_run_id=run_id,
         document_id=draft.document_id,
+        extraction_run_id=extraction_run_id,
         title=draft.title,
         description=draft.description,
         severity=draft.severity,
@@ -62,6 +69,14 @@ def _persist_finding(db: Session, application_id: str, run_id: str, draft) -> Fi
     return finding
 
 
+def _fields_from_db(db: Session, document_version_id: str) -> list[ExtractedField]:
+    return (
+        db.query(ExtractedField)
+        .filter(ExtractedField.document_version_id == document_version_id)
+        .all()
+    )
+
+
 def run_validation(
     db: Session,
     application: Application,
@@ -77,8 +92,6 @@ def run_validation(
     )
 
     classifier = NameBasedClassifier()
-    extractor = LocalExtractionModule()
-    normalizer = BasicNormalizationModule()
     reconciler = BasicReconciliationModule()
     forensics = UnavailableForensicsModule()
     rules = RuleEngine()
@@ -86,7 +99,11 @@ def run_validation(
 
     module_results: list[ModuleResult] = [
         classifier.capability(),
-        extractor.capability(),
+        ModuleResult(
+            module="extraction",
+            status=ModuleStatus.AVAILABLE,
+            message="Using persisted extraction runs when available; otherwise filename heuristics only.",
+        ),
         reconciler.capability(),
         rules.capability(),
         forensics.capability(),
@@ -96,37 +113,91 @@ def run_validation(
     docs = db.query(Document).filter(Document.application_id == application.id).all()
     eval_docs: list[EvalDocument] = []
     field_records: list[FieldRecord] = []
+    mismatch_drafts: list[FindingDraft] = []
+    extraction_run_by_doc: dict[str, str] = {}
 
     for d in docs:
         _ = d.versions
         version = d.latest_version
         if not version:
             continue
-        content = b""
-        path = Path(version.storage_path)
-        if path.exists():
-            content = path.read_bytes()
 
-        classification = classifier.classify(file_name=version.file_name)
-        drafts = extractor.extract(
-            file_name=version.file_name, extension=version.extension, content=content
+        latest_ext = (
+            db.query(ExtractionRun)
+            .filter(ExtractionRun.document_version_id == version.id)
+            .order_by(ExtractionRun.created_at.desc())
+            .first()
         )
-        drafts = normalizer.normalize(drafts)
-        fields = {f.field_name: f.value for f in drafts}
-        for f in drafts:
+        if latest_ext:
+            extraction_run_by_doc[d.id] = latest_ext.id
+            if latest_ext.category_mismatch:
+                mismatch_drafts.append(
+                    FindingDraft(
+                        title="Potential document-type mismatch",
+                        description=(
+                            f"Applicant selected '{latest_ext.selected_category}' but the system "
+                            f"predicted '{latest_ext.predicted_category.value}' from document signals. "
+                            "This is not a fraud determination — officer review is required."
+                        ),
+                        severity=FindingSeverity.MANUAL_REVIEW,
+                        outcome=ValidationOutcome.MANUAL_REVIEW,
+                        rule_code="SYN-RULE-CLASS-001",
+                        rule_name="[SYNTHETIC] Document category consistency",
+                        rule_version="v0.1-demo",
+                        handbook_ref="Demo handbook §classification (placeholder)",
+                        document_id=d.id,
+                        evidence=[
+                            EvidenceDraft(
+                                description=(
+                                    f"method={latest_ext.category_method}; "
+                                    f"signals={latest_ext.category_signals}"
+                                ),
+                                document_id=d.id,
+                                document_name=version.file_name,
+                            )
+                        ],
+                    )
+                )
+
+        db_fields = _fields_from_db(db, version.id)
+        fields: dict[str, str] = {}
+        for ef in db_fields:
+            # Prefer reviewer correction; skip conflicted fields for compliance checks
+            if ef.is_conflict and not ef.corrected_value:
+                continue
+            # Low / missing field confidence must not silently pass dependent checks —
+            # uncertain fields are omitted from deterministic rule inputs.
+            if ef.confidence is not None and ef.confidence < 0.55 and not ef.corrected_value:
+                continue
+            value = ef.corrected_value or ef.normalized_value or ef.value
+            fields[ef.field_name] = value
             field_records.append(
                 FieldRecord(
-                    field_name=f.field_name,
-                    value=f.value,
+                    field_name=ef.field_name,
+                    value=value,
                     document_id=d.id,
                     document_name=version.file_name,
-                    page_reference=f.page_reference,
+                    page_reference=ef.page_reference,
                 )
+            )
+
+        # Filename classifier as supplemental signal when no extraction category
+        classification = classifier.classify(file_name=version.file_name)
+        if latest_ext and latest_ext.predicted_category:
+            classification = ClassificationResult(
+                status=ModuleStatus.LIMITED,
+                label=latest_ext.predicted_category.value,
+                confidence=latest_ext.category_confidence,
+                method=latest_ext.category_method or "extraction_run",
+                rationale="From persisted extraction run",
             )
 
         warnings = []
         for w in (version.file_checks or {}).get("warnings", []):
             warnings.append(FileWarning(code="file_advisory", message=str(w)))
+        if latest_ext:
+            for w in latest_ext.warnings or []:
+                warnings.append(FileWarning(code="extraction", message=str(w)))
 
         eval_docs.append(
             EvalDocument(
@@ -144,7 +215,7 @@ def run_validation(
                 classification=classification,
             )
         )
-        forensics.analyze(file_name=version.file_name, content=content)
+        forensics.analyze(file_name=version.file_name, content=None)
 
     discrepancies = reconciler.reconcile(field_records)
     requirements = (
@@ -176,11 +247,12 @@ def run_validation(
     db.add(run)
     db.flush()
 
-    drafts = rules.evaluate(ctx)
+    drafts = rules.evaluate(ctx) + mismatch_drafts
     aggregation = aggregator.aggregate(drafts, module_results)
 
     for draft in aggregation.findings:
-        _persist_finding(db, application.id, run.id, draft)
+        ext_id = extraction_run_by_doc.get(draft.document_id) if draft.document_id else None
+        _persist_finding(db, application.id, run.id, draft, extraction_run_id=ext_id)
 
     adapter = get_verification_adapter()
     outcome = adapter.verify(
@@ -203,9 +275,7 @@ def run_validation(
         )
     )
     all_ok = all(
-        (d.latest_version.file_checks or {}).get("ok", True)
-        for d in docs
-        if d.latest_version
+        (d.latest_version.file_checks or {}).get("ok", True) for d in docs if d.latest_version
     )
     db.add(
         VerificationRequest(
@@ -225,19 +295,14 @@ def run_validation(
         )
     )
 
-    from app.document_processing.aggregator import ReviewSupportPacketBuilder
-
     packet = ReviewSupportPacketBuilder().build_packet(aggregation)
 
     application.finding_count = len(aggregation.findings)
     application.requires_manual_review = bool(packet.get("requiresManualReview"))
-    # Prioritization aid only
     score = min(
         100,
         sum(
-            {"failed": 40, "manual_review": 30, "warning": 15, "info": 5}.get(
-                f.severity.value, 5
-            )
+            {"failed": 40, "manual_review": 30, "warning": 15, "info": 5}.get(f.severity.value, 5)
             for f in aggregation.findings
         ),
     )

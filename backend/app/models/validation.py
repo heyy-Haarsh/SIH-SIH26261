@@ -53,6 +53,9 @@ class Finding(Base):
     document_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("documents.id", ondelete="SET NULL"), index=True, nullable=True
     )
+    extraction_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("extraction_runs.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     rule_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("regulatory_rules.id", ondelete="SET NULL"), index=True, nullable=True
     )

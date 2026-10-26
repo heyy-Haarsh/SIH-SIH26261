@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.seed import DEFAULT_DOCS
 from app.core.security import ensure_application_access
 from app.document_processing.intake import LocalIntakeModule
+from app.document_processing.orchestrator import run_extraction_for_version
 from app.models.application import Application
 from app.models.document import Document, DocumentVersion
 from app.models.enums import DocumentStatus, UserRole, ValidationOutcome
@@ -143,16 +144,53 @@ def upload_document(
     )
     db.commit()
 
-    app = db.query(Application).filter(Application.id == application_id).first()
-    run = run_validation(db, app, triggered_by=user.id, actor_name=user.name)
+    extraction_run_id = None
+    extraction_status = None
+    validation_run_id = None
+    findings_out = []
 
-    findings_db = db.query(Finding).filter(Finding.validation_run_id == run.id).all()
+    # Reload version after commit
+    version = db.query(DocumentVersion).filter(DocumentVersion.id == version.id).one()
+    doc = db.query(Document).filter(Document.id == doc.id).one()
+
+    if settings.auto_extract_on_upload:
+        ext_run = run_extraction_for_version(
+            db,
+            version,
+            application_id=application_id,
+            selected_requirement_code=requirement_code,
+            triggered_by_id=user.id,
+            force=False,
+        )
+        db.commit()
+        extraction_run_id = ext_run.id
+        extraction_status = (
+            ext_run.status.value if hasattr(ext_run.status, "value") else str(ext_run.status)
+        )
+
+    app = db.query(Application).filter(Application.id == application_id).first()
+    val_run = run_validation(db, app, triggered_by=user.id, actor_name=user.name)
+    validation_run_id = val_run.id
+
+    if extraction_run_id:
+        from app.models.extraction import ExtractionRun
+
+        ext = db.query(ExtractionRun).filter(ExtractionRun.id == extraction_run_id).first()
+        if ext:
+            ext.validation_run_id = validation_run_id
+            db.add(ext)
+            db.commit()
+
+    findings_db = db.query(Finding).filter(Finding.validation_run_id == val_run.id).all()
     for f in findings_db:
         _ = f.evidence
+    findings_out = [finding_to_out(f) for f in findings_db]
 
     return UploadResultOut(
         document_id=doc.id,
-        validation_run_id=run.id,
-        findings=[finding_to_out(f) for f in findings_db],
+        validation_run_id=validation_run_id,
+        extraction_run_id=extraction_run_id,
+        extraction_status=extraction_status,
+        findings=findings_out,
         file_checks=checks,
     )
