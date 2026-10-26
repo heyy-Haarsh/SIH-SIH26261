@@ -4,6 +4,7 @@ import { ROLE_HOME } from '@/lib/nav'
 import { OfficerDashboard } from '@/pages/officer/OfficerDashboard'
 import { QueuePage } from '@/pages/officer/QueuePage'
 import { ApplicationDetailPage } from '@/pages/officer/ApplicationDetailPage'
+import { ComparisonPage } from '@/pages/officer/ComparisonPage'
 import { ApplicantDashboard } from '@/pages/applicant/ApplicantDashboard'
 import { ApplicantApplicationsPage } from '@/pages/applicant/ApplicantApplicationsPage'
 import { NewApplicationPage } from '@/pages/applicant/NewApplicationPage'
@@ -15,7 +16,6 @@ import {
   ClipboardCheck,
   FileSearch,
   FileText,
-  GitCompare,
   HeartPulse,
   History,
   ListChecks,
@@ -76,17 +76,7 @@ function AppRoutes() {
           />
         }
       />
-      <Route
-        path="/officer/comparison"
-        element={
-          <PlaceholderPage
-            title="Cross-document Comparison"
-            breadcrumbs={['Scrutiny Officer', 'Comparison']}
-            description="Discrepancy comparison is available inside application details under Cross-document."
-            icon={GitCompare}
-          />
-        }
-      />
+      <Route path="/officer/comparison" element={<ComparisonPage />} />
       <Route
         path="/officer/verification"
         element={

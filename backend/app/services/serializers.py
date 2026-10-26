@@ -13,19 +13,70 @@ from app.schemas.common import (
     ApplicationDetailOut,
     ApplicationSummaryOut,
     AuditEventOut,
+    DiscrepancyOut,
     DocumentOut,
     DocumentRequirementOut,
     EvidenceOut,
     ExtractedFieldOut,
     FindingOut,
+    ReconciliationRunOut,
+    ReconciliationValueOut,
     ReviewNoteOut,
     VerificationOut,
 )
 from app.core.seed import DEFAULT_DOCS
+from app.services import reconciliation_service
 
 
 def _enum_val(v) -> str:
     return v.value if hasattr(v, "value") else str(v)
+
+
+def reconciliation_value_to_out(v) -> ReconciliationValueOut:
+    return ReconciliationValueOut(
+        document_id=v.document_id,
+        document_name=v.document_name,
+        value=v.value,
+        normalized_value=v.normalized_value,
+        page=v.page_reference,
+        page_number=v.page_number,
+        extracted_field_id=v.extracted_field_id,
+        evidence_snippet=v.evidence_snippet,
+    )
+
+
+def reconciliation_item_to_out(item) -> DiscrepancyOut:
+    return DiscrepancyOut(
+        id=item.id,
+        field_name=item.field_name,
+        outcome=_enum_val(item.outcome),
+        values=[reconciliation_value_to_out(v) for v in item.values],
+        severity=_enum_val(item.severity),
+        status=_enum_val(item.status),
+        title=item.title,
+        description=item.description,
+        match_kind=item.match_kind,
+        original_outcome=_enum_val(item.original_outcome),
+        resolution_reason=item.resolution_reason,
+        resolved_at=item.resolved_at,
+        fingerprint=item.fingerprint,
+    )
+
+
+def reconciliation_run_to_out(run) -> ReconciliationRunOut:
+    return ReconciliationRunOut(
+        id=run.id,
+        application_id=run.application_id,
+        validation_run_id=run.validation_run_id,
+        status=_enum_val(run.status),
+        trigger=run.trigger,
+        engine_version=run.engine_version,
+        input_fingerprint=run.input_fingerprint,
+        summary=run.summary or {},
+        items=[reconciliation_item_to_out(i) for i in (run.items or [])],
+        created_at=run.created_at,
+        completed_at=run.completed_at,
+    )
 
 
 def finding_to_out(f: Finding) -> FindingOut:
@@ -217,7 +268,10 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
         documents=[document_to_out(d, db) for d in app.documents],
         extracted_fields=extracted,
         findings=[finding_to_out(f) for f in findings],
-        discrepancies=[],
+        discrepancies=[
+            reconciliation_item_to_out(i)
+            for i in reconciliation_service.list_open_items_for_application(db, app.id)
+        ],
         verifications=[
             VerificationOut(
                 id=v.id,

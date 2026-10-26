@@ -21,6 +21,7 @@ from app.document_processing.types import (
     ModuleResult,
     ModuleStatus,
 )
+from app.services import reconciliation_service
 from app.integrations.base import VerificationClaim, VerificationSource, VerificationStatus
 from app.integrations.registry import get_verification_adapter
 from app.models.application import Application
@@ -178,6 +179,9 @@ def run_validation(
                     document_id=d.id,
                     document_name=version.file_name,
                     page_reference=ef.page_reference,
+                    page_number=ef.page_number,
+                    extracted_field_id=ef.id,
+                    evidence_snippet=f'{version.file_name}: "{value}"',
                 )
             )
 
@@ -217,20 +221,8 @@ def run_validation(
         )
         forensics.analyze(file_name=version.file_name, content=None)
 
-    discrepancies = reconciler.reconcile(field_records)
     requirements = (
         application.category.required_documents if application.category else DEFAULT_DOCS
-    )
-
-    ctx = EvalContext(
-        category_code=application.category.code if application.category else "",
-        program_name=application.program_name,
-        academic_year=application.academic_year,
-        requirements=requirements,
-        documents=eval_docs,
-        discrepancies=discrepancies,
-        module_results=module_results,
-        today=date.today(),
     )
 
     now = datetime.now(timezone.utc)
@@ -246,6 +238,32 @@ def run_validation(
     )
     db.add(run)
     db.flush()
+
+    # Persist reconciliation (MATCH + conflicts), then feed open non-MATCH into rules
+    recon_run = reconciliation_service.run_reconciliation(
+        db,
+        application,
+        triggered_by=triggered_by,
+        actor_name=actor_name,
+        trigger="validation",
+        validation_run_id=run.id,
+        commit=False,
+    )
+    discrepancies = reconciliation_service.drafts_for_validation(db, application.id)
+    # Also include any brand-new drafts from this compare that are non-MATCH
+    # (drafts_for_validation already reads open items just persisted).
+    _ = reconciler  # capability already recorded; persistence is authoritative
+
+    ctx = EvalContext(
+        category_code=application.category.code if application.category else "",
+        program_name=application.program_name,
+        academic_year=application.academic_year,
+        requirements=requirements,
+        documents=eval_docs,
+        discrepancies=discrepancies,
+        module_results=module_results,
+        today=date.today(),
+    )
 
     drafts = rules.evaluate(ctx) + mismatch_drafts
     aggregation = aggregator.aggregate(drafts, module_results)
@@ -315,6 +333,8 @@ def run_validation(
         "priorityScore": score,
         "priorityScoreNote": "Prioritization aid only — not proof of fraud or compliance",
         "reviewPacket": packet,
+        "reconciliationRunId": recon_run.id,
+        "reconciliationSummary": recon_run.summary,
     }
 
     record_audit(

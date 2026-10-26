@@ -5,6 +5,7 @@ from app.models.audit import AuditEvent
 from app.models.category import ApplicationCategory
 from app.models.document import Document, DocumentVersion, ExtractedField
 from app.models.extraction import ExtractionRun
+from app.models.reconciliation import ReconciliationItem, ReconciliationRun, ReconciliationValue
 from app.models.review import DeficiencyNotice, ReviewDecision
 from app.models.rule import RegulatoryRule, RuleVersion
 from app.models.user import Institution, User
@@ -23,6 +24,9 @@ __all__ = [
     "Finding",
     "FindingEvidence",
     "Institution",
+    "ReconciliationItem",
+    "ReconciliationRun",
+    "ReconciliationValue",
     "RegulatoryRule",
     "ReviewDecision",
     "RuleVersion",

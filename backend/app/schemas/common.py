@@ -101,12 +101,50 @@ class ExtractedFieldOut(CamelModel):
     corrected_value: str | None = None
 
 
+class ReconciliationValueOut(CamelModel):
+    document_id: str
+    document_name: str
+    value: str
+    normalized_value: str | None = None
+    page: str | None = None
+    page_number: int | None = None
+    extracted_field_id: str | None = None
+    evidence_snippet: str | None = None
+
+
 class DiscrepancyOut(CamelModel):
     id: str
     field_name: str
-    values: list[dict[str, Any]]
+    outcome: str
+    values: list[ReconciliationValueOut] = Field(default_factory=list)
     severity: str
     status: str
+    title: str | None = None
+    description: str | None = None
+    match_kind: str | None = None
+    original_outcome: str | None = None
+    resolution_reason: str | None = None
+    resolved_at: datetime | None = None
+    fingerprint: str | None = None
+
+
+class ReconciliationRunOut(CamelModel):
+    id: str
+    application_id: str
+    validation_run_id: str | None = None
+    status: str
+    trigger: str
+    engine_version: str
+    input_fingerprint: str
+    summary: dict[str, Any] = Field(default_factory=dict)
+    items: list[DiscrepancyOut] = Field(default_factory=list)
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class ReconciliationResolveIn(BaseModel):
+    status: str  # resolved | waived | accepted
+    reason: str
 
 
 class VerificationOut(CamelModel):

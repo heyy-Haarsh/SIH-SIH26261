@@ -44,9 +44,15 @@ _KEY_ALIASES: dict[str, str] = {
     "survey number": "survey_number",
     "survey no": "survey_number",
     "parcel number": "survey_number",
+    "plot number": "plot_number",
+    "plot no": "plot_number",
     "trust name": "trust_name",
     "society name": "trust_name",
     "document type": "document_type",
+    "address": "address",
+    "registered address": "registered_address",
+    "institution address": "address",
+    "college address": "address",
 }
 
 DATE_FIELDS = frozenset({"valid_until", "expiry_date", "issue_date"})

@@ -30,15 +30,35 @@ import { useRole } from '@/app/RoleContext'
 import { useApplicationDetail } from '@/hooks/useApplicationDetail'
 import { api } from '@/services/api'
 
+function outcomeTone(outcome: string): 'pass' | 'failed' | 'warning' | 'manual' | 'info' | 'neutral' {
+  switch (outcome) {
+    case 'MATCH':
+      return 'pass'
+    case 'MISMATCH':
+      return 'failed'
+    case 'MISSING_DATA':
+      return 'warning'
+    case 'POSSIBLE_DUPLICATE':
+    case 'MANUAL_REVIEW':
+      return 'manual'
+    default:
+      return 'neutral'
+  }
+}
+
 export function ApplicationDetailPage() {
   const { id } = useParams()
   const { role } = useRole()
-  const { detail, source, loading, error } = useApplicationDetail(id)
+  const { detail, source, loading, error, reload } = useApplicationDetail(id)
   const [tab, setTab] = useState('overview')
   const [note, setNote] = useState('')
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
   const [extractBusy, setExtractBusy] = useState(false)
   const [extractMsg, setExtractMsg] = useState<string | null>(null)
+  const [reconBusy, setReconBusy] = useState(false)
+  const [resolveBusy, setResolveBusy] = useState<string | null>(null)
+  const [resolveReason, setResolveReason] = useState<Record<string, string>>({})
+  const [reconMsg, setReconMsg] = useState<string | null>(null)
   const roleLabel =
     role === 'officer' ? 'Scrutiny Officer' : role === 'applicant' ? 'Applicant' : 'Administrator'
   const listPath = role === 'applicant' ? '/applicant/applications' : '/officer/queue'
@@ -158,7 +178,11 @@ export function ApplicationDetailPage() {
               { id: 'overview', label: 'Checklist & documents' },
               { id: 'extracted', label: 'Extracted fields', count: detail.extractedFields.length },
               { id: 'findings', label: 'Findings', count: detail.findings.length },
-              { id: 'compare', label: 'Cross-document' },
+              {
+                id: 'compare',
+                label: 'Reconciliation',
+                count: detail.discrepancies.filter((d) => d.outcome !== 'MATCH').length,
+              },
               { id: 'verify', label: 'Verification' },
               { id: 'review', label: 'Review & audit' },
             ]}
@@ -404,29 +428,167 @@ export function ApplicationDetailPage() {
           )}
 
           {tab === 'compare' && (
-            <div className="space-y-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
-                <GitCompare size={16} /> Cross-document discrepancies
-              </div>
-              {detail.discrepancies.map((d) => (
-                <div key={d.id} className="rounded-[var(--radius-md)] border border-border p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="text-sm font-medium text-ink">{d.fieldName}</span>
-                    <Badge tone="manual">{d.severity.replace(/_/g, ' ')}</Badge>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {d.values.map((v) => (
-                      <div key={v.documentName} className="rounded border border-border bg-surface p-3">
-                        <div className="text-[11px] text-ink-muted">
-                          {v.documentName}
-                          {v.page ? ` · ${v.page}` : ''}
-                        </div>
-                        <div className="mt-1 text-sm font-medium text-ink">{v.value}</div>
-                      </div>
-                    ))}
-                  </div>
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <GitCompare size={16} /> Cross-document reconciliation
                 </div>
-              ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={reconBusy}
+                  leftIcon={<RefreshCw size={14} />}
+                  onClick={async () => {
+                    setReconBusy(true)
+                    setReconMsg(null)
+                    try {
+                      const run = await api.runReconciliation(role, detail.id)
+                      const counts = (run.summary?.counts as Record<string, number>) || {}
+                      setReconMsg(
+                        `Reconciliation completed — MATCH ${counts.MATCH ?? 0}, MISMATCH ${counts.MISMATCH ?? 0}, MISSING ${counts.MISSING_DATA ?? 0}, DUPLICATE ${counts.POSSIBLE_DUPLICATE ?? 0}. Not a fraud determination.`,
+                      )
+                      await reload()
+                    } catch (err) {
+                      setReconMsg(err instanceof Error ? err.message : 'Reconciliation failed')
+                    } finally {
+                      setReconBusy(false)
+                    }
+                  }}
+                >
+                  {reconBusy ? 'Running…' : 'Run reconciliation'}
+                </Button>
+              </div>
+              <p className="text-xs text-ink-muted">
+                Compares institution name, registration/reference numbers, addresses, dates,
+                survey/plot numbers, and land area. Outcomes are MATCH / MISMATCH / MISSING_DATA /
+                POSSIBLE_DUPLICATE / MANUAL_REVIEW — never labeled as fraud.
+              </p>
+              {reconMsg && (
+                <div className="rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-xs text-ink-secondary">
+                  {reconMsg}
+                </div>
+              )}
+
+              {detail.discrepancies.length === 0 && (
+                <EmptyState
+                  icon={GitCompare}
+                  title="No reconciliation items yet"
+                  description="Upload documents with overlapping fields, then run reconciliation or validation."
+                />
+              )}
+
+              {(['MISMATCH', 'MISSING_DATA', 'POSSIBLE_DUPLICATE', 'MANUAL_REVIEW', 'MATCH'] as const).map(
+                (bucket) => {
+                  const rows = detail.discrepancies.filter((d) => d.outcome === bucket)
+                  if (!rows.length) return null
+                  return (
+                    <div key={bucket} className="space-y-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                        {bucket.replace(/_/g, ' ')} ({rows.length})
+                      </h4>
+                      {rows.map((d) => (
+                        <div
+                          key={d.id}
+                          className="rounded-[var(--radius-md)] border border-border p-4"
+                        >
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-ink">
+                              {d.title || d.fieldName}
+                            </span>
+                            <Badge tone={outcomeTone(d.outcome)}>{d.outcome}</Badge>
+                            {d.matchKind && <Badge tone="info">{d.matchKind}</Badge>}
+                            <Badge tone="neutral">{d.status}</Badge>
+                          </div>
+                          {d.description && (
+                            <p className="mb-3 text-xs text-ink-secondary">{d.description}</p>
+                          )}
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {d.values.map((v) => (
+                              <div
+                                key={`${v.documentId}-${v.value}`}
+                                className="rounded border border-border bg-surface p-3"
+                              >
+                                <div className="text-[11px] text-ink-muted">
+                                  {v.documentName}
+                                  {v.page ? ` · ${v.page}` : ''}
+                                  {v.pageNumber != null ? ` · page ${v.pageNumber}` : ''}
+                                </div>
+                                <div className="mt-1 text-sm font-medium text-ink">{v.value}</div>
+                                {v.normalizedValue && v.normalizedValue !== v.value && (
+                                  <div className="mt-1 text-[11px] text-ink-muted">
+                                    Normalized: {v.normalizedValue}
+                                  </div>
+                                )}
+                                {v.extractedFieldId && (
+                                  <div className="mt-1 text-[10px] text-ink-muted break-all">
+                                    Field evidence: {v.extractedFieldId}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          {bucket !== 'MATCH' &&
+                            d.status === 'open' &&
+                            (role === 'officer' || role === 'admin') && (
+                              <div className="mt-3 space-y-2 border-t border-border pt-3">
+                                <label className="block text-[11px] font-medium text-ink-secondary">
+                                  Resolution reason (preserves original finding)
+                                </label>
+                                <Textarea
+                                  rows={2}
+                                  value={resolveReason[d.id] ?? ''}
+                                  onChange={(e) =>
+                                    setResolveReason((prev) => ({
+                                      ...prev,
+                                      [d.id]: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Explain why this is accepted, waived, or resolved…"
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                  {(['resolved', 'waived', 'accepted'] as const).map((st) => (
+                                    <Button
+                                      key={st}
+                                      size="sm"
+                                      variant={st === 'resolved' ? 'primary' : 'outline'}
+                                      disabled={resolveBusy === d.id}
+                                      onClick={async () => {
+                                        const reason = (resolveReason[d.id] ?? '').trim()
+                                        if (reason.length < 5) {
+                                          setReconMsg('Enter a resolution reason (min 5 characters).')
+                                          return
+                                        }
+                                        setResolveBusy(d.id)
+                                        try {
+                                          await api.resolveReconciliationItem(role, d.id, {
+                                            status: st,
+                                            reason,
+                                          })
+                                          setReconMsg(
+                                            `Recorded ${st} for ${d.fieldName}. Original outcome ${d.originalOutcome ?? d.outcome} preserved.`,
+                                          )
+                                          await reload()
+                                        } catch (err) {
+                                          setReconMsg(
+                                            err instanceof Error ? err.message : 'Resolve failed',
+                                          )
+                                        } finally {
+                                          setResolveBusy(null)
+                                        }
+                                      }}
+                                    >
+                                      Mark {st}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                },
+              )}
             </div>
           )}
 

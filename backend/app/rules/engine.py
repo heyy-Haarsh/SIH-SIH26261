@@ -285,25 +285,45 @@ class ClassificationConsistencyRule(Rule):
 class CrossDocumentConsistencyRule(Rule):
     code = "SYN-RULE-007"
     name = f"{SYNTHETIC} Cross-document identity consistency"
-    description = "Identity fields extracted from different documents should agree."
+    description = (
+        "Identity/location/date fields extracted from different documents should agree. "
+        "Outcomes are MATCH/MISMATCH/MISSING_DATA/POSSIBLE_DUPLICATE/MANUAL_REVIEW — never fraud."
+    )
     handbook_ref = "Demo handbook §A.B (placeholder)"
 
     def evaluate(self, ctx: EvalContext, rt: RuleRuntime) -> list[FindingDraft]:
+        from app.models.enums import ReconciliationOutcome
+
         out = []
         for disc in ctx.discrepancies:
-            label = field_label(disc.field_name)
+            # MATCH results are persisted by the reconciliation service but do not
+            # become validation findings.
+            if getattr(disc, "outcome", None) == ReconciliationOutcome.MATCH:
+                continue
+            label = field_label(disc.field_name) if disc.field_name != "_document_hash" else "Document content"
+            title = disc.title or f"{label} differs across documents"
+            description = disc.description or (
+                f"Extracted values for '{label}' require officer confirmation. Not a fraud determination."
+            )
+            severity = getattr(disc, "severity", None) or FindingSeverity.MANUAL_REVIEW
+            outcome = getattr(disc, "validation_outcome", None) or ValidationOutcome.MANUAL_REVIEW
             out.append(
                 self._draft(
                     rt,
-                    title=f"{label} differs across documents",
-                    description=f"Extracted values for '{label}' differ between documents. Requires officer confirmation.",
-                    severity=FindingSeverity.MANUAL_REVIEW,
+                    title=title,
+                    description=description,
+                    severity=severity,
+                    outcome=outcome,
                     evidence=[
                         EvidenceDraft(
-                            description=f'{v.document_name}: "{v.value}"',
+                            description=(
+                                v.evidence_snippet
+                                or f'{v.document_name}: "{v.value}"'
+                            ),
                             document_id=v.document_id,
                             document_name=v.document_name,
                             page_reference=v.page,
+                            extracted_field_id=getattr(v, "extracted_field_id", None),
                         )
                         for v in disc.values
                     ],

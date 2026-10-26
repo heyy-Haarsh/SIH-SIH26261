@@ -55,5 +55,27 @@ export function useApplicationDetail(id: string | undefined) {
     }
   }, [id, role])
 
-  return { detail, source, loading, error, setDetail }
+  function reload() {
+    if (!id) return Promise.resolve()
+    setLoading(true)
+    return api
+      .getApplication(id, role)
+      .then((data) => {
+        setDetail(data)
+        setSource('api')
+        setError(null)
+      })
+      .catch((err: unknown) => {
+        const mock = getDemoApplicationDetail(id)
+        if (mock) {
+          setDetail(mock)
+          setSource('mock')
+        } else {
+          setError(err instanceof ApiError ? err.message : 'Failed to load application')
+        }
+      })
+      .finally(() => setLoading(false))
+  }
+
+  return { detail, source, loading, error, setDetail, reload }
 }

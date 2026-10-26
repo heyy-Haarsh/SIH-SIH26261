@@ -153,3 +153,28 @@ class FieldReviewStatus(StrEnum):
     CORRECTED = "corrected"
     REJECTED = "rejected"
     CONFLICT = "conflict"
+
+
+class ReconciliationOutcome(StrEnum):
+    """Explainable cross-document comparison outcomes — never 'fraud'."""
+
+    MATCH = "MATCH"
+    MISMATCH = "MISMATCH"
+    MISSING_DATA = "MISSING_DATA"
+    POSSIBLE_DUPLICATE = "POSSIBLE_DUPLICATE"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+
+
+class ReconciliationRunStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ReconciliationItemStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    WAIVED = "waived"
+    ACCEPTED = "accepted"
+    CLEARED = "cleared"  # no longer present after a later rerun

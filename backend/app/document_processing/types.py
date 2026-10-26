@@ -5,7 +5,7 @@ from datetime import date
 from enum import Enum
 from typing import Any, Optional
 
-from app.models.enums import FindingSeverity, ValidationOutcome
+from app.models.enums import FindingSeverity, ReconciliationOutcome, ValidationOutcome
 
 
 class ModuleStatus(str, Enum):
@@ -86,6 +86,9 @@ class FieldRecord:
     document_id: str
     document_name: str
     page_reference: Optional[str] = None
+    page_number: Optional[int] = None
+    extracted_field_id: Optional[str] = None
+    evidence_snippet: Optional[str] = None
 
 
 @dataclass
@@ -94,12 +97,23 @@ class DiscrepancyValue:
     document_name: str
     value: str
     page: Optional[str] = None
+    page_number: Optional[int] = None
+    extracted_field_id: Optional[str] = None
+    normalized_value: Optional[str] = None
+    evidence_snippet: Optional[str] = None
 
 
 @dataclass
 class DiscrepancyDraft:
     field_name: str
     values: list[DiscrepancyValue]
+    outcome: ReconciliationOutcome = ReconciliationOutcome.MISMATCH
+    severity: FindingSeverity = FindingSeverity.MANUAL_REVIEW
+    validation_outcome: ValidationOutcome = ValidationOutcome.MANUAL_REVIEW
+    title: str = ""
+    description: str = ""
+    match_kind: Optional[str] = None  # exact | normalization
+    fingerprint: Optional[str] = None
 
 
 # ---- Module 6/9: rule evaluation + aggregation ----------------------------
@@ -109,6 +123,7 @@ class EvidenceDraft:
     document_id: Optional[str] = None
     document_name: Optional[str] = None
     page_reference: Optional[str] = None
+    extracted_field_id: Optional[str] = None
 
 
 @dataclass

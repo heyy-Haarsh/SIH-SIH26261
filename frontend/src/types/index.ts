@@ -171,12 +171,52 @@ export interface Finding {
   createdAt: string
 }
 
+export type ReconciliationOutcome =
+  | 'MATCH'
+  | 'MISMATCH'
+  | 'MISSING_DATA'
+  | 'POSSIBLE_DUPLICATE'
+  | 'MANUAL_REVIEW'
+
+export interface ReconciliationValue {
+  documentId: string
+  documentName: string
+  value: string
+  normalizedValue?: string | null
+  page?: string | null
+  pageNumber?: number | null
+  extractedFieldId?: string | null
+  evidenceSnippet?: string | null
+}
+
 export interface Discrepancy {
   id: string
   fieldName: string
-  values: { documentName: string; value: string; page?: string }[]
+  outcome: ReconciliationOutcome
+  values: ReconciliationValue[]
   severity: FindingSeverity
-  status: FindingStatus
+  status: FindingStatus | 'cleared'
+  title?: string | null
+  description?: string | null
+  matchKind?: string | null
+  originalOutcome?: ReconciliationOutcome | null
+  resolutionReason?: string | null
+  resolvedAt?: string | null
+  fingerprint?: string | null
+}
+
+export interface ReconciliationRun {
+  id: string
+  applicationId: string
+  validationRunId?: string | null
+  status: string
+  trigger: string
+  engineVersion: string
+  inputFingerprint: string
+  summary: Record<string, unknown>
+  items: Discrepancy[]
+  createdAt: string
+  completedAt?: string | null
 }
 
 export interface VerificationResult {

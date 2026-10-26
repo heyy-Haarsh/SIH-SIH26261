@@ -1,4 +1,11 @@
-import type { ApiHealth, ApplicationDetail, ApplicationSummary, ExtractionRun } from '@/types'
+import type {
+  ApiHealth,
+  ApplicationDetail,
+  ApplicationSummary,
+  Discrepancy,
+  ExtractionRun,
+  ReconciliationRun,
+} from '@/types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
@@ -115,4 +122,31 @@ export const api = {
       message: string
       languagesMissing: string[]
     }>('/extraction/ocr-capability', { role }),
+
+  runReconciliation: (role: string, applicationId: string) =>
+    request<ReconciliationRun>(`/applications/${applicationId}/reconciliation-runs`, {
+      method: 'POST',
+      role,
+    }),
+
+  latestReconciliation: (role: string, applicationId: string) =>
+    request<ReconciliationRun | null>(
+      `/applications/${applicationId}/reconciliation-runs/latest`,
+      { role },
+    ),
+
+  listReconciliationItems: (role: string, applicationId: string) =>
+    request<Discrepancy[]>(`/applications/${applicationId}/reconciliation-items`, { role }),
+
+  resolveReconciliationItem: (
+    role: string,
+    itemId: string,
+    body: { status: string; reason: string },
+  ) =>
+    request<Discrepancy>(`/reconciliation-items/${itemId}/resolve`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 }

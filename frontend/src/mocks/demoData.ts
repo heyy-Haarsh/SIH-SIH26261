@@ -442,13 +442,28 @@ function baseDetail(summary: ApplicationSummary): ApplicationDetail {
     discrepancies: [
       {
         id: 'disc-1',
-        fieldName: 'Institution Name',
+        fieldName: 'institution_name',
+        outcome: 'MISMATCH',
+        title: 'Institution name differs across documents',
+        description:
+          'Extracted values conflict after normalization. Requires officer confirmation — not a fraud determination.',
         values: [
-          { documentName: 'affidavit.pdf', value: 'Demo Institute of Technology', page: 'p.1' },
-          { documentName: 'land_ownership.pdf', value: 'Demo Institute of Tech.', page: 'p.2' },
+          {
+            documentId: 'doc-1',
+            documentName: 'affidavit.pdf',
+            value: 'Demo Institute of Technology',
+            page: 'p.1',
+          },
+          {
+            documentId: 'doc-2',
+            documentName: 'land_ownership.pdf',
+            value: 'Another College Name',
+            page: 'p.2',
+          },
         ],
         severity: 'manual_review',
         status: 'open',
+        originalOutcome: 'MISMATCH',
       },
     ],
     verifications: [
