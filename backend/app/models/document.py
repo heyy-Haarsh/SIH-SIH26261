@@ -1,0 +1,96 @@
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.database import Base
+from app.models.application import Application
+from app.models.base import TimestampMixin, UTCDateTime, enum_type, new_id, utcnow
+from app.models.enums import DocumentStatus, ExtractionMethod, ValidationOutcome
+
+
+class Document(Base, TimestampMixin):
+    """One logical document per (application, requirement); versions hold the files."""
+
+    __tablename__ = "documents"
+    __table_args__ = (UniqueConstraint("application_id", "requirement_code", name="uq_doc_app_req"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    application_id: Mapped[str] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    requirement_code: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[DocumentStatus] = mapped_column(
+        enum_type(DocumentStatus), default=DocumentStatus.UPLOADED, nullable=False
+    )
+    current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    application: Mapped[Application] = relationship(back_populates="documents")
+    versions: Mapped[list["DocumentVersion"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentVersion.version",
+    )
+
+    @property
+    def latest_version(self) -> Optional["DocumentVersion"]:
+        return self.versions[-1] if self.versions else None
+
+
+class DocumentVersion(Base):
+    __tablename__ = "document_versions"
+    __table_args__ = (
+        UniqueConstraint("document_id", "version", name="uq_docver_doc_version"),
+        Index("ix_docver_sha256", "sha256"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    extension: Mapped[str] = mapped_column(String(16), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    declared_content_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    page_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    file_checks: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    validation_outcome: Mapped[ValidationOutcome] = mapped_column(
+        enum_type(ValidationOutcome), default=ValidationOutcome.PENDING, nullable=False
+    )
+    uploaded_by_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+    document: Mapped[Document] = relationship(back_populates="versions")
+    extracted_fields: Mapped[list["ExtractedField"]] = relationship(
+        back_populates="document_version", cascade="all, delete-orphan"
+    )
+
+
+class ExtractedField(Base):
+    __tablename__ = "extracted_fields"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    document_version_id: Mapped[str] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    application_id: Mapped[str] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    field_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    # None when the value came from deterministic parsing rather than a scored model.
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    page_reference: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    method: Mapped[ExtractionMethod] = mapped_column(
+        enum_type(ExtractionMethod), default=ExtractionMethod.TEXT_KEY_VALUE, nullable=False
+    )
+    corrected_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+    document_version: Mapped[DocumentVersion] = relationship(back_populates="extracted_fields")

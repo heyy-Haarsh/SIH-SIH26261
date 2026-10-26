@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/.venv/
+backend/venv/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build & coverage
+frontend/dist/
+frontend/coverage/
+backend/.coverage
+backend/htmlcov/
+backend/.pytest_cache/
+*.tsbuildinfo
+
+# Uploads & local storage (sensitive)
+backend/uploads/
+backend/storage/
+*.local.db
+*.sqlite
+*.sqlite3
+praman_dev.db
+backend/tests/test_praman.db
+backend/tests/_test_uploads/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Celery / Redis dumps
+celerybeat-schedule
+dump.rdb
+
+# OS
+Desktop.ini

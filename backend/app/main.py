@@ -1,0 +1,61 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from app.api.routes import admin, applications, health
+from app.core.config import get_settings
+from app.core.database import SessionLocal, init_db
+from app.core.errors import register_exception_handlers
+from app.core.logging import configure_logging
+from app.core.seed import seed_if_empty
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    configure_logging()
+    settings = get_settings()
+    settings.validate_runtime()
+    settings.upload_path.mkdir(parents=True, exist_ok=True)
+    init_db()
+    db = SessionLocal()
+    try:
+        seed_if_empty(db)
+    finally:
+        db.close()
+    yield
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    application = FastAPI(
+        title=settings.app_name,
+        description=(
+            "PRAMAN — AI-assisted application validation and regulatory compliance platform "
+            "(SIH26261). Demo auth is for local development only."
+        ),
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    application.include_router(health.router, prefix="/api/v1")
+    application.include_router(applications.router, prefix="/api/v1")
+    application.include_router(admin.router, prefix="/api/v1")
+    register_exception_handlers(application)
+
+    @application.exception_handler(Exception)
+    async def unhandled_exception_handler(_request, _exc):  # type: ignore[no-untyped-def]
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    return application
+
+
+app = create_app()
