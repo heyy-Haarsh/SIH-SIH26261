@@ -15,6 +15,7 @@ import { DocumentReportPanel } from '@/components/scrutiny/DocumentReportPanel'
 import { IssuesPanel } from '@/components/scrutiny/IssuesPanel'
 import { ReconciliationPanel } from '@/components/scrutiny/ReconciliationPanel'
 import { errorText } from '@/components/scrutiny/scrutinyUi'
+import { CorrectionTable, rowsFromOfficerText } from '@/components/shared/CorrectionTable'
 import { formatDate } from '@/lib/format'
 import { useRole } from '@/app/RoleContext'
 import { useApplicationDetail } from '@/hooks/useApplicationDetail'
@@ -247,7 +248,17 @@ export function ApplicationDetailPage() {
               label="Not uploaded"
               value={data ? String(data.missingDocuments.length) : '—'}
             />
-            {detail.lastTransitionNote && <Row label="Last note" value={detail.lastTransitionNote} />}
+            {detail.lastTransitionNote && (
+              <div className="border-b border-border pb-2 last:border-0">
+                <dt className="mb-2 text-ink-muted">Last note</dt>
+                <dd>
+                  <CorrectionTable
+                    rows={rowsFromOfficerText(detail.lastTransitionNote)}
+                    empty={detail.lastTransitionNote.split('\n')[0]}
+                  />
+                </dd>
+              </div>
+            )}
           </dl>
           <p className="mt-3 flex items-start gap-1.5 text-[11px] text-ink-muted">
             <Info size={12} className="mt-0.5 shrink-0" />

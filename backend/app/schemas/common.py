@@ -460,6 +460,10 @@ class ApplicantApplicationOut(CamelModel):
     resubmit_blockers: list[str] = Field(default_factory=list)
     required_total: int = 0
     required_uploaded: int = 0
+    officer_decision: str | None = None
+    officer_decision_reason: str | None = None
+    officer_decision_at: datetime | None = None
+    corrections: list[dict] = Field(default_factory=list)
 
 
 class ApplicantApplicationSummaryOut(CamelModel):
@@ -475,3 +479,5 @@ class ApplicantApplicationSummaryOut(CamelModel):
     open_clarifications: int = 0
     required_total: int = 0
     required_uploaded: int = 0
+    officer_decision: str | None = None
+    latest_request_title: str | None = None

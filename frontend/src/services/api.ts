@@ -606,6 +606,15 @@ export const api = {
     }),
 
   // ---- Scrutiny review (officer/admin) -------------------------------------
+  transcribeSpeech: (role: string, file: Blob, filename: string) => {
+    const body = new FormData()
+    body.append('file', file, filename)
+    return request<{ transcript: string; language?: string | null; provider: string }>(
+      '/scrutiny/transcribe',
+      { method: 'POST', role, body },
+    )
+  },
+
   getScrutinyReview: (role: string, applicationId: string) =>
     request<ScrutinyReview>(`/applications/${applicationId}/scrutiny-review`, { role }),
 

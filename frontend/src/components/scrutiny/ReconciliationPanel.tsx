@@ -156,7 +156,7 @@ function Item({
       {d.resolutionReason && (
         <p className="mt-2 text-[11px] text-ink-muted">Officer note: {d.resolutionReason}</p>
       )}
-      {canAct && d.status === 'open' && <ResolveControl onResolve={resolve} />}
+      {canAct && d.status === 'open' && <ResolveControl role={role} onResolve={resolve} />}
     </div>
   )
 }

@@ -327,6 +327,8 @@ def test_review_explains_what_the_applicant_must_correct_and_keeps_decisions(cli
     review = _review(client, app_id)
     d = review["decision"]
     assert d["mustCorrect"], "open issues with an applicant action must be listed"
+    assert d["mustCorrectRows"], "correction rows must name a document and an action"
+    assert all(r.get("action") for r in d["mustCorrectRows"])
     assert d["clarificationDraftBody"].startswith("Please correct the following")
     assert d["rejectionDraftBody"].startswith("The application cannot be recommended")
     assert all(not line.startswith("None") for line in d["mustCorrect"])
@@ -341,6 +343,10 @@ def test_review_explains_what_the_applicant_must_correct_and_keeps_decisions(cli
     after = _review(client, app_id)
     assert after["decision"]["finalDecision"] == "rejected"
     assert "Names do not match" in after["decision"]["finalDecisionReason"]
+    mine = client.get(f"/api/v1/applicant/applications/{app_id}", headers=APPLICANT)
+    assert mine.status_code == 200
+    assert mine.json()["officerDecision"] == "rejected"
+    assert mine.json()["officerDecisionReason"]
 
     _revalidate(client, app_id)  # re-running checks must not erase the recorded decision
     summary = _detail(client, app_id)["scrutinySummary"]

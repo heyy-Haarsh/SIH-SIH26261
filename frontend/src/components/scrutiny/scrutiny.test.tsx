@@ -12,6 +12,7 @@ vi.mock('@/services/api', () => ({
     resolveFinding: vi.fn().mockResolvedValue({}),
     resolveDocVerificationCheck: vi.fn().mockResolvedValue({}),
     requestClarification: vi.fn().mockResolvedValue({}),
+    transcribeSpeech: vi.fn().mockResolvedValue({ transcript: 'Checked the original.', provider: 'sarvam' }),
   },
 }))
 
@@ -153,6 +154,8 @@ describe('IssuesPanel', () => {
     render(<IssuesPanel review={review()} role="officer" onOpenDocument={() => {}} onChanged={onChanged} />)
     // Expand the issue first
     fireEvent.click(screen.getByText('Institution name is missing'))
+    fireEvent.click(screen.getByText('Draft note'))
+    expect((screen.getByLabelText('Officer note') as HTMLTextAreaElement).value.length).toBeGreaterThan(5)
     fireEvent.change(screen.getByPlaceholderText(/Explain why this is resolved/), {
       target: { value: 'Checked the original document' },
     })

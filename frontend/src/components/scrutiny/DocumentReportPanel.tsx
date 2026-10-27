@@ -314,7 +314,7 @@ function CheckRow({
           <HandbookBadge reference={check.handbook} />
         </div>
       )}
-      {canResolve && <ResolveControl onResolve={resolve} />}
+      {canResolve && <ResolveControl role={role} onResolve={resolve} />}
     </li>
   )
 }

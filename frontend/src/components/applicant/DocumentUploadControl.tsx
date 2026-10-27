@@ -15,6 +15,8 @@ interface Props {
   disabled?: boolean
   /** Show the type-match/clarity result here (when the parent does not render it from data). */
   showCheck?: boolean
+  /** Button only — no format line. Use on the application checklist. */
+  compact?: boolean
   /** Called after a successful upload so the parent can refresh in the background. */
   onUploaded: (result: UploadDocumentResult) => void | Promise<void>
 }
@@ -33,6 +35,7 @@ export function DocumentUploadControl({
   policy = FALLBACK_POLICY,
   disabled,
   showCheck = false,
+  compact = false,
   onUploaded,
 }: Props) {
   const { role } = useRole()
@@ -116,9 +119,11 @@ export function DocumentUploadControl({
                   : 'Upload file'}
           </span>
         </label>
-        <span className="text-[11px] text-ink-muted">
-          {policy.allowedExtensions.map((x) => x.toUpperCase()).join(', ')} · max {policy.maxUploadMb} MB
-        </span>
+        {!compact && (
+          <span className="text-[11px] text-ink-muted">
+            {policy.allowedExtensions.map((x) => x.toUpperCase()).join(', ')} · max {policy.maxUploadMb} MB
+          </span>
+        )}
       </div>
 
       {errors.length > 0 && (

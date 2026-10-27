@@ -82,6 +82,21 @@ export const CLARITY_LABEL: Record<ClarityState, string> = {
   not_checked: 'Readability not checked',
 }
 
+/** Short labels for the applicant document table. */
+export const TYPE_MATCH_SHORT: Record<TypeMatchState, string> = {
+  matched: 'Right type',
+  mismatch: 'Wrong type?',
+  unclear: 'Type unclear',
+  not_checked: '—',
+}
+
+export const CLARITY_SHORT: Record<ClarityState, string> = {
+  clear: 'Readable',
+  unclear: 'Hard to read',
+  unreadable: 'Unreadable',
+  not_checked: '—',
+}
+
 /** Mandatory documents still missing (applicant-facing "what do I still have to do"). */
 export function missingMandatory(app: Pick<ApplicantApplication, 'requirements'>): string[] {
   return app.requirements

@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_provider: str = "none"  # gemini | openai | none
     llm_model: str = ""
+    # Sarvam speech-to-text (officer note dictation). Key stays on the server.
+    sarvam_api_key: str = ""
+    sarvam_stt_url: str = "https://api.sarvam.ai/speech-to-text"
+    sarvam_stt_model: str = "saaras:v4"
+    sarvam_realtime_ws_url: str = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
+    sarvam_realtime_model: str = "saaras:v3-realtime"
     enable_ai_extraction: bool = False
     aicte_api_base_url: str = ""
     aicte_api_key: str = ""

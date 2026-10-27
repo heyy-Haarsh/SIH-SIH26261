@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, History, MessageSquare, Wand2 } from 'luci
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
+import { CorrectionTable, rowsFromOfficerText } from '@/components/shared/CorrectionTable'
 import { formatDateTime } from '@/lib/format'
 import { api } from '@/services/api'
 import type { ApplicationDetail, ScrutinyReview } from '@/types'
@@ -67,32 +68,41 @@ export function DecisionPanel({ detail, review, role, onChanged }: Props) {
                 : 'border-emerald-200 bg-emerald-50'
             }`}
           >
-            <div className="flex items-center gap-2 font-semibold text-ink">
-              Recorded decision:{' '}
+            <div className="flex flex-wrap items-center gap-2 font-semibold text-ink">
+              Recorded decision
               <Badge tone={decision.finalDecision === 'rejected' ? 'failed' : 'pass'}>
                 {decision.finalDecision}
               </Badge>
             </div>
-            <p className="mt-1 text-xs text-ink-secondary">{decision.finalDecisionReason}</p>
-            <p className="mt-1 text-[11px] text-ink-muted">
+            <p className="mt-1 text-xs text-ink-muted">
               {decision.finalDecisionBy ?? 'Officer'}
               {decision.finalDecisionAt ? ` · ${formatDateTime(decision.finalDecisionAt)}` : ''}
             </p>
+            {decision.finalDecisionReason && (
+              <p className="mt-2 text-xs text-ink-secondary">
+                {decision.finalDecisionReason.split('\n')[0]}
+              </p>
+            )}
           </div>
         )}
 
-        {decision && decision.mustCorrect.length > 0 && (
-          <div className="rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 p-3">
-            <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-amber-950">
-              <AlertTriangle size={15} /> What the applicant must correct
+        {(() => {
+          const rows =
+            decision?.mustCorrectRows && decision.mustCorrectRows.length > 0
+              ? decision.mustCorrectRows
+              : decision?.mustCorrect?.length
+                ? rowsFromOfficerText(decision.mustCorrect.join('\n'))
+                : rowsFromOfficerText(decision?.finalDecisionReason)
+          if (!rows.length) return null
+          return (
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+                <AlertTriangle size={15} /> What the applicant must correct
+              </div>
+              <CorrectionTable rows={rows} />
             </div>
-            <ol className="list-decimal space-y-1 pl-5 text-xs text-amber-950">
-              {decision.mustCorrect.map((m) => (
-                <li key={m}>{m}</li>
-              ))}
-            </ol>
-          </div>
-        )}
+          )
+        })()}
 
         {canAct && !closed && (
           <>
@@ -220,22 +230,39 @@ export function DecisionPanel({ detail, review, role, onChanged }: Props) {
           {(decision?.clarificationRequests ?? []).length === 0 ? (
             <p className="text-xs text-ink-muted">No clarification has been requested.</p>
           ) : (
-            <ul className="space-y-2">
-              {decision?.clarificationRequests.map((c) => (
-                <li key={c.id} className="rounded border border-border p-2 text-xs">
-                  <Badge tone={c.status === 'open' ? 'warning' : c.status === 'responded' ? 'info' : 'neutral'}>
-                    {c.status}
-                  </Badge>{' '}
-                  <span className="font-medium">{c.title}</span>
-                  <p className="mt-1 whitespace-pre-line text-ink-secondary">{c.description}</p>
-                  {c.applicantResponse && (
-                    <p className="mt-1 text-[11px] text-ink-muted">
-                      Applicant response: {c.applicantResponse}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
+              <table className="w-full min-w-[480px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-surface text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Request</th>
+                    <th className="px-3 py-2">Applicant reply</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {decision?.clarificationRequests.map((c) => (
+                    <tr key={c.id} className="border-b border-border last:border-0 align-top">
+                      <td className="px-3 py-2">
+                        <Badge
+                          tone={c.status === 'open' ? 'warning' : c.status === 'responded' ? 'info' : 'neutral'}
+                        >
+                          {c.status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-ink">{c.title}</div>
+                        <div className="mt-1 text-xs text-ink-secondary">
+                          <CorrectionTable rows={rowsFromOfficerText(c.description)} empty="" />
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-ink-muted">
+                        {c.applicantResponse || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -251,7 +278,15 @@ export function DecisionPanel({ detail, review, role, onChanged }: Props) {
                 <div className="text-xs font-medium text-ink">
                   {n.author} · {n.role}
                 </div>
-                <p className="mt-1 whitespace-pre-line text-sm text-ink-secondary">{n.content}</p>
+                {rowsFromOfficerText(n.content).length > 1 ? (
+                  <div className="mt-2">
+                    <CorrectionTable rows={rowsFromOfficerText(n.content)} />
+                  </div>
+                ) : (
+                  <p className="mt-1 max-h-32 overflow-auto whitespace-pre-line text-xs text-ink-secondary">
+                    {n.content}
+                  </p>
+                )}
                 <div className="mt-1 text-[11px] text-ink-muted">{formatDateTime(n.createdAt)}</div>
               </li>
             ))}

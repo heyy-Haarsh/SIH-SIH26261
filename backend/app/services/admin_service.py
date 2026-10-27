@@ -41,7 +41,7 @@ KNOWN_LOGIC_KEYS = frozenset(
 KNOWN_LOGIC_VALUES = frozenset({"missing_mandatory", "filename_contains_expired", "cross_identity"})
 
 SENSITIVE_SETTING_KEYS = frozenset(
-    {"secret_key", "llm_api_key", "aicte_api_key", "password", "token", "api_key"}
+    {"secret_key", "llm_api_key", "aicte_api_key", "sarvam_api_key", "password", "token", "api_key"}
 )
 
 DEFAULT_VERIFICATION_SETTINGS: dict[str, Any] = {

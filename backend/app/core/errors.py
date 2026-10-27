@@ -62,6 +62,11 @@ class UnprocessableError(PramanError):
     code = "unprocessable"
 
 
+class ServiceUnavailableError(PramanError):
+    status_code = 503
+    code = "service_unavailable"
+
+
 def _body(detail: str, code: str, **extra: Any) -> dict[str, Any]:
     return {"detail": detail, "code": code, **extra}
 

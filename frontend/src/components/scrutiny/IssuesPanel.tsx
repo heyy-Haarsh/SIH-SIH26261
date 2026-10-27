@@ -254,76 +254,87 @@ function IssueRow({
 
       {/* ── Expanded detail panel ── */}
       {expanded && hasDetails && (
-        <div className="border-t border-border bg-surface-muted px-4 pb-4 pt-3">
-          {/* Explanation */}
-          {issue.explanation && (
-            <p className="text-sm text-ink-secondary">{issue.explanation}</p>
-          )}
-
-          {/* Related documents (cross-doc issues) */}
-          {issue.relatedDocuments.length > 0 && (
-            <p className="mt-2 text-xs text-ink-muted">
-              <span className="font-medium">Involves: </span>
-              {issue.relatedDocuments.map((d, i) => (
-                <span key={d.id}>
-                  {i > 0 && ', '}
-                  <button
-                    type="button"
-                    className="text-brand underline"
-                    onClick={() => onOpenDocument(d.id)}
-                  >
-                    {d.name}
-                  </button>
-                </span>
-              ))}
-            </p>
-          )}
-
-          {/* Applicant action */}
-          {issue.applicantAction && (
-            <div className="mt-3 flex items-start gap-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2">
-              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" />
-              <p className="text-xs text-amber-900">
-                <span className="font-semibold">Applicant should: </span>
-                {issue.applicantAction}
-              </p>
-            </div>
-          )}
-
-          {/* Handbook reference */}
-          {issue.handbook.status === 'verified' && (
-            <div className="mt-3">
-              <HandbookBadge reference={issue.handbook} />
-            </div>
-          )}
-
-          {/* Evidence */}
-          {issue.evidence.length > 0 && (
-            <details className="mt-3">
-              <summary className="cursor-pointer text-xs font-medium text-ink-secondary">
-                Evidence ({issue.evidence.length} item{issue.evidence.length !== 1 ? 's' : ''})
-              </summary>
-              <ul className="mt-1 space-y-1 pl-3 text-xs text-ink-muted">
-                {issue.evidence.map((e, i) => (
-                  <li key={`${e.text}-${i}`} className="border-l-2 border-border pl-2">
-                    {e.text}
-                    {e.documentName && (
-                      <span className="text-ink-muted"> · {e.documentName}</span>
-                    )}
-                    {e.pageReference && (
-                      <span className="text-ink-muted"> ({e.pageReference})</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {issue.handbook.status !== 'verified' && (
-                <p className="mt-1 pl-3 text-xs text-ink-muted">{issue.handbook.note}</p>
+        <div className="border-t border-border bg-surface px-4 py-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-[var(--radius-md)] border border-border bg-white p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                What we found
+              </h4>
+              {issue.explanation && (
+                <p className="mt-1.5 text-sm text-ink-secondary">{issue.explanation}</p>
               )}
-            </details>
-          )}
+              {issue.relatedDocuments.length > 0 && (
+                <p className="mt-2 text-xs text-ink-muted">
+                  <span className="font-medium text-ink-secondary">Involves: </span>
+                  {issue.relatedDocuments.map((d, i) => (
+                    <span key={d.id}>
+                      {i > 0 && ', '}
+                      <button
+                        type="button"
+                        className="text-brand underline"
+                        onClick={() => onOpenDocument(d.id)}
+                      >
+                        {d.name}
+                      </button>
+                    </span>
+                  ))}
+                </p>
+              )}
+              {issue.evidence.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-medium text-ink-secondary">
+                    Evidence ({issue.evidence.length})
+                  </summary>
+                  <ul className="mt-1 space-y-1 text-xs text-ink-muted">
+                    {issue.evidence.map((e, i) => (
+                      <li key={`${e.text}-${i}`}>
+                        {e.text}
+                        {e.documentName ? ` · ${e.documentName}` : ''}
+                        {e.pageReference ? ` (${e.pageReference})` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                  {issue.handbook.status !== 'verified' && (
+                    <p className="mt-1 text-xs text-ink-muted">{issue.handbook.note}</p>
+                  )}
+                </details>
+              )}
+            </div>
 
-          {/* Resolve control */}
-          {resolvable && <ResolveControl onResolve={resolve} />}
+            <div className="rounded-[var(--radius-md)] border border-border bg-white p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                For the applicant
+              </h4>
+              {issue.applicantAction ? (
+                <p className="mt-1.5 flex items-start gap-2 text-sm text-ink-secondary">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                  {issue.applicantAction}
+                </p>
+              ) : (
+                <p className="mt-1.5 text-sm text-ink-muted">No applicant action on this item.</p>
+              )}
+              {issue.handbook.status === 'verified' && (
+                <div className="mt-2">
+                  <HandbookBadge reference={issue.handbook} />
+                </div>
+              )}
+            </div>
+
+            {resolvable && (
+              <div className="md:col-span-2">
+                <ResolveControl
+                  role={role}
+                  onResolve={resolve}
+                  draftContext={{
+                    title: issue.title,
+                    explanation: issue.explanation,
+                    applicantAction: issue.applicantAction,
+                    documentName: issue.documentName,
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </li>

@@ -650,6 +650,10 @@ export interface ApplicantApplication {
   resubmitBlockers: string[]
   requiredTotal: number
   requiredUploaded: number
+  officerDecision?: string | null
+  officerDecisionReason?: string | null
+  officerDecisionAt?: string | null
+  corrections?: Array<{ documentName?: string; action: string; status?: string }>
 }
 
 export interface ApplicantApplicationSummary {
@@ -665,6 +669,8 @@ export interface ApplicantApplicationSummary {
   openClarifications: number
   requiredTotal: number
   requiredUploaded: number
+  officerDecision?: string | null
+  latestRequestTitle?: string | null
 }
 
 // ---- Scrutiny review (officer-facing; never sent to applicants) ----------------------
@@ -753,6 +759,7 @@ export interface DecisionContext {
   finalDecisionBy?: string | null
   finalDecisionAt?: string | null
   mustCorrect: string[]
+  mustCorrectRows?: Array<{ documentName?: string; action: string }>
   clarificationDraftTitle: string
   clarificationDraftBody: string
   rejectionDraftBody: string

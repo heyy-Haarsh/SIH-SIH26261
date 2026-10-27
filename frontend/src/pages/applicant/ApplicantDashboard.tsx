@@ -33,6 +33,13 @@ export function ApplicantDashboard() {
   }, [role])
 
   const needsAction = apps.filter((a) => a.openClarifications > 0 || a.status === 'clarification_required')
+  const officerInbox = apps.filter(
+    (a) =>
+      a.openClarifications > 0 ||
+      a.status === 'clarification_required' ||
+      a.officerDecision === 'recommended' ||
+      a.officerDecision === 'rejected',
+  )
   const missingDocs = apps.reduce((n, a) => n + Math.max(0, a.requiredTotal - a.requiredUploaded), 0)
   const inReview = apps.filter((a) =>
     ['submitted', 'processing', 'under_scrutiny', 'resubmitted', 'awaiting_review', 'under_review'].includes(
@@ -52,18 +59,49 @@ export function ApplicantDashboard() {
         </div>
       )}
 
-      {needsAction.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-amber-300 bg-amber-50 px-4 py-3">
-          <div className="text-sm text-amber-950">
-            <span className="font-semibold">Action needed:</span> the scrutiny officer asked for clarification on{' '}
-            {needsAction.length} application{needsAction.length === 1 ? '' : 's'}.
+      {officerInbox.length > 0 && (
+        <Card className="mb-5" padding={false}>
+          <div className="border-b border-border px-5 py-3">
+            <h2 className="text-sm font-semibold text-ink">From the scrutiny officer</h2>
+            <p className="text-xs text-ink-muted">Clarifications and decisions on your applications</p>
           </div>
-          <Link to={`/applicant/applications/${needsAction[0].id}`}>
-            <Button size="sm" leftIcon={<AlertTriangle size={14} />}>
-              Respond now
-            </Button>
-          </Link>
-        </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  <th className="px-4 py-2">Application</th>
+                  <th className="px-4 py-2">Officer status</th>
+                  <th className="px-4 py-2">What they asked</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {officerInbox.map((a) => (
+                  <tr key={a.id} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5 font-medium text-ink">{a.applicationNumber}</td>
+                    <td className="px-4 py-2.5">
+                      {a.openClarifications > 0
+                        ? `${a.openClarifications} clarification(s)`
+                        : a.officerDecision
+                          ? a.officerDecision
+                          : a.statusLabel}
+                    </td>
+                    <td className="px-4 py-2.5 text-ink-secondary">
+                      {a.latestRequestTitle || 'Open the application for details'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <Link to={`/applicant/applications/${a.id}`}>
+                        <Button size="sm" variant="outline">
+                          Open
+                        </Button>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -107,6 +107,7 @@ class DecisionContextOut(CamelModel):
     final_decision_by: str | None = None
     final_decision_at: str | None = None
     must_correct: list[str] = Field(default_factory=list)
+    must_correct_rows: list[dict] = Field(default_factory=list)
     clarification_draft_title: str = ""
     clarification_draft_body: str = ""
     rejection_draft_body: str = ""

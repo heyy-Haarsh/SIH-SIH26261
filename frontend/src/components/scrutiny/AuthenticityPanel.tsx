@@ -274,7 +274,13 @@ function IndicatorCard({
           ))}
         </ul>
       )}
-      {resolvable && <ResolveControl onResolve={resolve} label="Officer resolution (original risk class is preserved)" />}
+      {resolvable && (
+        <ResolveControl
+          role={role}
+          onResolve={resolve}
+          label="Officer note"
+        />
+      )}
     </div>
   )
 }

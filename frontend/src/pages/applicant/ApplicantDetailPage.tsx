@@ -1,19 +1,26 @@
 import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, FileText, History as HistoryIcon, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, History as HistoryIcon, ShieldAlert } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Textarea } from '@/components/ui/Input'
-import { DocumentCheckPanel } from '@/components/applicant/DocumentCheckPanel'
 import { DocumentUploadControl } from '@/components/applicant/DocumentUploadControl'
+import { CorrectionTable, rowsFromOfficerText } from '@/components/shared/CorrectionTable'
 import { useRole } from '@/app/RoleContext'
 import { useRefreshable } from '@/hooks/useRefreshable'
 import { useUploadPolicy } from '@/hooks/useUploadPolicy'
 import { api, ApiError } from '@/services/api'
-import { applicationStatusTone, uploadStatusTone } from '@/lib/applicantStatus'
+import {
+  applicationStatusTone,
+  CLARITY_SHORT,
+  clarityTone,
+  TYPE_MATCH_SHORT,
+  typeMatchTone,
+  uploadStatusTone,
+} from '@/lib/applicantStatus'
 import { formatBytes } from '@/lib/fileValidation'
 import { formatDate, formatDateTime } from '@/lib/format'
 import type { ApplicantApplication, ApplicantDeficiency, ApplicantRequirement } from '@/types'
@@ -112,6 +119,32 @@ export function ApplicantDetailPage() {
           </p>
         </Card>
 
+        {(data.officerDecision ||
+          (data.corrections && data.corrections.length > 0) ||
+          data.deficiencies.length > 0) && (
+          <Card padding={false}>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">
+              <div>
+                <h2 className="text-sm font-semibold text-ink">From the scrutiny officer</h2>
+                <p className="text-xs text-ink-muted">
+                  {data.officerDecisionReason || data.statusMessage}
+                </p>
+              </div>
+              {data.officerDecision && (
+                <Badge tone={data.officerDecision === 'rejected' ? 'failed' : 'pass'}>
+                  {data.officerDecision}
+                </Badge>
+              )}
+            </div>
+            <div className="p-5">
+              <CorrectionTable
+                rows={data.corrections ?? []}
+                empty="No outstanding corrections from the officer."
+              />
+            </div>
+          </Card>
+        )}
+
         {data.deficiencies.length > 0 && (
           <ClarificationSection
             app={data}
@@ -120,35 +153,51 @@ export function ApplicantDetailPage() {
           />
         )}
 
-        <Card>
-          <CardHeader
-            title="Required documents"
-            description="Upload each document. Replace a file at any time before a final decision; earlier versions are kept on record."
-          />
-          {policy && (
-            <p className="mb-3 text-[11px] text-ink-muted">
-              {policy.marathiSupported
-                ? 'Marathi (मराठी) and Hindi text recognition is enabled for scanned documents.'
-                : 'Marathi / Hindi text recognition is not installed on this server yet. For Marathi affidavits, upload a text-based PDF; scanned copies will be read by the officer.'}
-            </p>
-          )}
-          <ul className="divide-y divide-border">
-            {data.requirements.map((req) => (
-              <RequirementRow
-                key={req.code}
-                req={req}
-                applicationId={data.id}
-                canUpload={data.canUpload}
-                filePolicy={filePolicy}
-                onChanged={reload}
-              />
-            ))}
-          </ul>
-          {!data.canUpload && (
-            <p className="mt-3 text-xs text-ink-muted">
-              This application has a final decision, so documents can no longer be changed.
-            </p>
-          )}
+        <Card padding={false}>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-ink">Required documents</h2>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                {data.requiredUploaded} of {data.requiredTotal} uploaded. Replacing a file keeps the
+                earlier version.
+              </p>
+            </div>
+            <Badge tone={data.requiredUploaded >= data.requiredTotal ? 'pass' : 'pending'}>
+              {data.requiredUploaded}/{data.requiredTotal}
+            </Badge>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  <th className="px-4 py-2">Document</th>
+                  <th className="px-4 py-2">File</th>
+                  <th className="px-4 py-2">Type</th>
+                  <th className="px-4 py-2">Readability</th>
+                  {data.canUpload && <th className="px-4 py-2" />}
+                </tr>
+              </thead>
+              <tbody>
+                {data.requirements.map((req) => (
+                  <RequirementRow
+                    key={req.code}
+                    req={req}
+                    applicationId={data.id}
+                    canUpload={data.canUpload}
+                    filePolicy={filePolicy}
+                    onChanged={reload}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="px-5 py-3 text-[11px] text-ink-muted">
+            Type and readability are an automatic pre-check. The officer makes the final decision.
+            {!data.canUpload && ' This application is closed, so files can no longer be changed.'}
+            {policy && !policy.marathiSupported
+              ? ' Marathi scans need a text PDF on this server.'
+              : ''}
+          </p>
         </Card>
 
         <Card>
@@ -193,52 +242,73 @@ function RequirementRow({
   onChanged: () => Promise<void> | void
 }) {
   const doc = req.document
+  const check = doc?.documentCheck
   return (
-    <li className="py-4 first:pt-0 last:pb-0" data-testid={`requirement-${req.code}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <FileText size={15} className="text-ink-muted" />
-        <span className="text-sm font-medium text-ink">{req.name}</span>
-        <Badge tone={req.mandatory ? 'neutral' : 'pending'}>{req.mandatory ? 'Required' : 'Optional'}</Badge>
-        <Badge tone={uploadStatusTone(req.uploadStatus)}>{req.uploadStatusLabel}</Badge>
-      </div>
-
-      {doc && (
-        <div className="mt-2 space-y-2 pl-6">
-          <p className="text-xs text-ink-secondary">
-            {doc.fileName} · {formatBytes(doc.sizeBytes)} · uploaded {formatDateTime(doc.uploadedAt)}
-            {doc.version > 1 ? ` · version ${doc.version}` : ''}
-          </p>
-          {doc.documentCheck && <DocumentCheckPanel check={doc.documentCheck} />}
-          {doc.previousVersions.length > 0 && (
-            <details className="text-xs text-ink-muted">
-              <summary className="cursor-pointer select-none">
-                Earlier versions ({doc.previousVersions.length})
-              </summary>
-              <ul className="mt-1 space-y-0.5 pl-4">
-                {doc.previousVersions.map((v) => (
-                  <li key={v.version}>
-                    Version {v.version}: {v.fileName} · {formatDateTime(v.uploadedAt)}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
+    <tr className="border-b border-border last:border-0" data-testid={`requirement-${req.code}`}>
+      <td className="px-4 py-3 align-top">
+        <div className="font-medium text-ink">{req.name}</div>
+        <div className="mt-1 flex flex-wrap gap-1">
+          {!req.mandatory && <Badge tone="pending">Optional</Badge>}
+          <Badge tone={uploadStatusTone(req.uploadStatus)}>{req.uploadStatusLabel}</Badge>
         </div>
-      )}
-
+      </td>
+      <td className="px-4 py-3 align-top">
+        {doc ? (
+          <>
+            <div className="truncate font-medium text-ink" title={doc.fileName}>
+              {doc.fileName}
+            </div>
+            <div className="mt-0.5 text-[11px] text-ink-muted">
+              {doc.version > 1 ? `v${doc.version} · ` : ''}
+              {formatBytes(doc.sizeBytes)} · {formatDateTime(doc.uploadedAt)}
+            </div>
+            {doc.previousVersions.length > 0 && (
+              <details className="mt-1 text-[11px] text-ink-muted">
+                <summary className="cursor-pointer select-none">
+                  Earlier versions ({doc.previousVersions.length})
+                </summary>
+                <ul className="mt-1 space-y-0.5">
+                  {doc.previousVersions.map((v) => (
+                    <li key={v.version}>
+                      v{v.version}: {v.fileName}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        ) : (
+          <span className="text-ink-muted">No file yet</span>
+        )}
+      </td>
+      <td className="px-4 py-3 align-top">
+        {check ? (
+          <Badge tone={typeMatchTone(check.typeMatch)}>{TYPE_MATCH_SHORT[check.typeMatch]}</Badge>
+        ) : (
+          <span className="text-ink-muted">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3 align-top">
+        {check ? (
+          <Badge tone={clarityTone(check.clarity)}>{CLARITY_SHORT[check.clarity]}</Badge>
+        ) : (
+          <span className="text-ink-muted">—</span>
+        )}
+      </td>
       {canUpload && (
-        <div className="mt-3 pl-6">
+        <td className="px-4 py-3 align-top text-right">
           <DocumentUploadControl
             applicationId={applicationId}
             requirementCode={req.code}
             requirementName={req.name}
             hasDocument={Boolean(doc)}
             policy={filePolicy}
+            compact
             onUploaded={onChanged}
           />
-        </div>
+        </td>
       )}
-    </li>
+    </tr>
   )
 }
 
@@ -314,7 +384,15 @@ function ClarificationSection({
                 {d.status === 'open' ? 'Needs your response' : d.status === 'responded' ? 'Responded' : 'Closed'}
               </Badge>
             </div>
-            <p className="text-xs text-ink-secondary">{d.description}</p>
+            <div className="mt-2">
+              <CorrectionTable
+                rows={
+                  d.description.includes(': ')
+                    ? rowsFromOfficerText(d.description)
+                    : [{ documentName: d.title, action: d.description }]
+                }
+              />
+            </div>
             {d.applicantResponse && (
               <p className="mt-2 text-xs text-ink-muted">Your response: {d.applicantResponse}</p>
             )}

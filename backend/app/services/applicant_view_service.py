@@ -7,6 +7,8 @@ forensic indicators, rule codes, verification run codes or officer notes.
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import NotFoundError
@@ -14,8 +16,8 @@ from app.core.security import ensure_application_access
 from app.core.seed import DEFAULT_DOCS
 from app.models.application import Application
 from app.models.audit import AuditEvent
-from app.models.enums import ApplicationStatus, DeficiencyStatus, UserRole
-from app.models.review import DeficiencyNotice
+from app.models.enums import ApplicationStatus, DeficiencyStatus, ReviewDecisionType, UserRole
+from app.models.review import DeficiencyNotice, ReviewDecision
 from app.models.user import User
 from app.schemas.common import (
     ApplicantApplicationOut,
@@ -217,6 +219,62 @@ def _history_rows(db: Session, app: Application) -> list[ApplicantHistoryEntryOu
     ]
 
 
+def _latest_decision(db: Session, app: Application) -> ReviewDecision | None:
+    return (
+        db.query(ReviewDecision)
+        .filter(
+            ReviewDecision.application_id == app.id,
+            ReviewDecision.decision_type.in_(
+                [ReviewDecisionType.RECOMMEND, ReviewDecisionType.REJECT, ReviewDecisionType.APPROVE]
+            ),
+        )
+        .order_by(ReviewDecision.created_at.desc())
+        .first()
+    )
+
+
+def _decision_label(row: ReviewDecision | None) -> str | None:
+    if row is None:
+        return None
+    kind = row.decision_type.value if hasattr(row.decision_type, "value") else str(row.decision_type)
+    if kind in ("recommend", "approve"):
+        return "recommended"
+    if kind == "reject":
+        return "rejected"
+    return kind
+
+
+def _short_reason(text: str | None) -> str | None:
+    if not text:
+        return None
+    first = text.strip().split("\n", 1)[0].strip()
+    if first.startswith("The application cannot be recommended"):
+        return "The officer recorded a decision. The items to correct are listed below."
+    return first[:280]
+
+
+def _correction_rows(notices: list[ApplicantDeficiencyOut], decision: ReviewDecision | None) -> list[dict]:
+    rows: list[dict] = []
+    for n in notices:
+        if n.status not in ("open", "responded"):
+            continue
+        rows.append({"documentName": n.title, "action": n.description, "status": n.status})
+    if not rows and decision and decision.content:
+        parts = re.split(r"\n+|(?:;\s*(?=[A-Z][^:]{2,70}:\s))", decision.content)
+        for raw in parts:
+            line = raw.strip(" -–\t")
+            if not line or line.startswith("The application cannot"):
+                continue
+            if line[:2].rstrip(".").isdigit() or (len(line) > 2 and line[0].isdigit() and line[1] == "."):
+                line = line.split(".", 1)[-1].strip()
+            if ": " in line[:80]:
+                doc, action = line.split(": ", 1)
+                rows.append({"documentName": doc.strip(), "action": action.strip(), "status": "from_decision"})
+            elif line:
+                rows.append({"documentName": "Application", "action": line, "status": "from_decision"})
+    return rows
+
+
 def _counts(rows: list[ApplicantRequirementOut]) -> tuple[int, int]:
     mandatory = [r for r in rows if r.mandatory]
     return len(mandatory), sum(1 for r in mandatory if r.document is not None)
@@ -228,6 +286,8 @@ def get_applicant_application(db: Session, user: User, application_id: str) -> A
     rows = _requirement_rows(db, app)
     total, uploaded = _counts(rows)
     blockers = resubmit_blockers(db, app)
+    decision = _latest_decision(db, app)
+    notices = _deficiency_rows(db, app)
     can_resubmit = app.status in (
         ApplicationStatus.CLARIFICATION_REQUIRED,
         ApplicationStatus.DEFICIENCY,
@@ -245,7 +305,7 @@ def get_applicant_application(db: Session, user: User, application_id: str) -> A
         status_message=_status_message(status),
         submitted_at=app.submitted_at,
         requirements=rows,
-        deficiencies=_deficiency_rows(db, app),
+        deficiencies=notices,
         history=_history_rows(db, app),
         can_upload=app.status not in TERMINAL_STATUSES,
         can_resubmit=can_resubmit,
@@ -255,6 +315,10 @@ def get_applicant_application(db: Session, user: User, application_id: str) -> A
         ) else [],
         required_total=total,
         required_uploaded=uploaded,
+        officer_decision=_decision_label(decision),
+        officer_decision_reason=_short_reason(decision.content if decision else None),
+        officer_decision_at=decision.created_at if decision else None,
+        corrections=_correction_rows(notices, decision),
     )
 
 
@@ -277,14 +341,17 @@ def list_applicant_applications(db: Session, user: User) -> list[ApplicantApplic
         status = app.status.value if hasattr(app.status, "value") else str(app.status)
         defs = [r for r in _required_defs(app) if r.get("mandatory", True)]
         uploaded_codes = {d.requirement_code for d in app.documents}
-        open_count = (
+        open_q = (
             db.query(DeficiencyNotice)
             .filter(
                 DeficiencyNotice.application_id == app.id,
                 DeficiencyNotice.status == DeficiencyStatus.OPEN,
             )
-            .count()
+            .order_by(DeficiencyNotice.created_at.desc())
         )
+        open_count = open_q.count()
+        latest_open = open_q.first()
+        decision = _latest_decision(db, app)
         out.append(
             ApplicantApplicationSummaryOut(
                 id=app.id,
@@ -300,6 +367,12 @@ def list_applicant_applications(db: Session, user: User) -> list[ApplicantApplic
                 open_clarifications=open_count,
                 required_total=len(defs),
                 required_uploaded=sum(1 for r in defs if r["code"] in uploaded_codes),
+                officer_decision=_decision_label(decision),
+                latest_request_title=(
+                    latest_open.title
+                    if latest_open
+                    else _short_reason(decision.content if decision else None)
+                ),
             )
         )
     return out

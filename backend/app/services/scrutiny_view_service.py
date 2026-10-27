@@ -374,6 +374,7 @@ def _decision_context(ctx: ReviewContext, issues: list[ScrutinyIssueOut]) -> Dec
         .first()
     )
     must: list[str] = []
+    rows: list[dict] = []
     for i in issues:
         if i.status != "open" or i.severity not in COUNTED or not i.applicant_action:
             continue
@@ -381,6 +382,12 @@ def _decision_context(ctx: ReviewContext, issues: list[ScrutinyIssueOut]) -> Dec
         line = f"{who}{i.applicant_action}"
         if line not in must:
             must.append(line)
+            rows.append(
+                {
+                    "documentName": i.document_name or "Application",
+                    "action": i.applicant_action,
+                }
+            )
 
     draft_title = ""
     draft_body = ""
@@ -391,8 +398,8 @@ def _decision_context(ctx: ReviewContext, issues: list[ScrutinyIssueOut]) -> Dec
             f"{n}. {m}" for n, m in enumerate(must, 1)
         )
         rejection = (
-            "The application cannot be recommended because of the following unresolved issues:\n"
-            + "\n".join(f"- {m}" for m in must)
+            "The application cannot be recommended because of unresolved issues. "
+            "See the correction list."
         )
     return DecisionContextOut(
         status=enum_val(app.status),
@@ -417,6 +424,7 @@ def _decision_context(ctx: ReviewContext, issues: list[ScrutinyIssueOut]) -> Dec
         final_decision_by=(final.author.name if final and final.author else None),
         final_decision_at=final.created_at.isoformat() if final else None,
         must_correct=must,
+        must_correct_rows=rows,
         clarification_draft_title=draft_title,
         clarification_draft_body=draft_body,
         rejection_draft_body=rejection,
