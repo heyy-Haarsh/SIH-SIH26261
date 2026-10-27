@@ -1,0 +1,10 @@
+Affidavit 2
+
+Institution Name: Demo Institute of Technology
+Signatory Name: A. Officer
+Signatory Designation: Principal
+Execution Date: 2026-01-15
+Execution Place: Pune
+Stamp Paper Ref: ESTAMP-VERIFIED-001
+Notary Details: Notary Public, Pune Reg. N-123
+E-Stamp Number: ESTAMP-VERIFIED-001

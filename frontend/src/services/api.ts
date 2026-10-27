@@ -1,5 +1,14 @@
 import type {
+  AdminAuditDetail,
   AdminAuditPage,
+  AuditFacets,
+  Integration,
+  IntegrationList,
+  RuleDraftProposal,
+  RuleImportResult,
+  RuleImportValidation,
+  RuleUsage,
+  SystemHealth,
   AdminCategory,
   AdminInstitution,
   AdminRule,
@@ -7,26 +16,37 @@ import type {
   AdminStats,
   AdminUser,
   ApiHealth,
+  ApplicantApplication,
+  ApplicantApplicationSummary,
   ApplicationDetail,
+  ApplicationMetrics,
   ApplicationSummary,
   DeficiencyNotice,
+  DocumentCheck,
+  UploadPolicy,
   Discrepancy,
   DocumentVerificationCheck,
   DocumentVerificationRun,
+  DocumentReport,
   ExtractionRun,
   Finding,
   ForensicsIndicator,
   ForensicsRun,
+  HandbookReferenceAdmin,
   ReconciliationRun,
+  ScrutinyReview,
 } from '@/types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** Machine-readable server code, e.g. `open_clarifications`, `file_too_large`. */
+  code?: string
+  constructor(status: number, message: string, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -56,16 +76,74 @@ async function request<T>(
   })
   if (!res.ok) {
     let detail = res.statusText
+    let code: string | undefined
     try {
       const body = await res.json()
       detail = formatDetail(body) || res.statusText
+      if (body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'string') {
+        code = (body as { code: string }).code
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail, code)
+  }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
+export interface AuditSearchParams {
+  action?: string
+  category?: string
+  actor?: string
+  actorRole?: string
+  applicationNumber?: string
+  entityType?: string
+  q?: string
+  dateFrom?: string
+  dateTo?: string
+  limit?: number
+  offset?: number
+}
+
+function auditQuery(params: AuditSearchParams): string {
+  const q = new URLSearchParams()
+  const map: Array<[keyof AuditSearchParams, string]> = [
+    ['action', 'action'],
+    ['category', 'category'],
+    ['actor', 'actor'],
+    ['actorRole', 'actor_role'],
+    ['applicationNumber', 'application_number'],
+    ['entityType', 'entity_type'],
+    ['q', 'q'],
+    ['dateFrom', 'date_from'],
+    ['dateTo', 'date_to'],
+  ]
+  for (const [key, name] of map) {
+    const value = params[key]
+    if (value) q.set(name, String(value))
+  }
+  if (params.limit != null) q.set('limit', String(params.limit))
+  if (params.offset != null) q.set('offset', String(params.offset))
+  const qs = q.toString()
+  return qs ? `?${qs}` : ''
+}
+async function requestBlob(path: string, role: string): Promise<{ blob: Blob; fileName?: string }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'X-Demo-Role': role, 'X-Demo-User-Id': `demo-${role}` },
+  })
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      detail = formatDetail(await res.json()) || res.statusText
     } catch {
       /* ignore */
     }
     throw new ApiError(res.status, detail)
   }
-  if (res.status === 204) return undefined as T
-  return res.json() as Promise<T>
+  const disposition = res.headers.get('content-disposition') ?? ''
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+  return { blob: await res.blob(), fileName: match ? decodeURIComponent(match[1]) : undefined }
 }
 
 export interface UploadDocumentResult {
@@ -75,6 +153,11 @@ export interface UploadDocumentResult {
   extractionStatus: string | null
   findings: unknown[]
   fileChecks: unknown
+  pipelineOk?: boolean
+  pipelineWarnings?: string[]
+  documentCheck?: DocumentCheck | null
+  documentVersion?: number | null
+  replacedPrevious?: boolean
 }
 
 export const api = {
@@ -83,14 +166,31 @@ export const api = {
   listApplications: (role: string) =>
     request<ApplicationSummary[]>('/applications', { role }),
 
+  applicationMetrics: (role: string) =>
+    request<ApplicationMetrics>('/applications/metrics', { role }),
+
   getApplication: (id: string, role: string) =>
     request<ApplicationDetail>(`/applications/${id}`, { role }),
 
+  // ---- Applicant-only views (narrow DTOs: no internal scrutiny data) ----
+  listMyApplications: (role: string) =>
+    request<ApplicantApplicationSummary[]>('/applicant/applications', { role }),
+
+  getMyApplication: (id: string, role: string) =>
+    request<ApplicantApplication>(`/applicant/applications/${id}`, { role }),
+
+  uploadPolicy: (role: string) => request<UploadPolicy>('/applications/upload-policy', { role }),
+
   createApplication: (
     role: string,
-    body: { category_code: string; program_name: string; academic_year: string },
+    body: {
+      category_code: string
+      institution_name: string
+      program_name: string
+      academic_year: string
+    },
   ) =>
-    request<ApplicationSummary>('/applications', {
+    request<ApplicantApplication>('/applications', {
       method: 'POST',
       role,
       headers: { 'Content-Type': 'application/json' },
@@ -134,6 +234,8 @@ export const api = {
       available: boolean
       message: string
       languagesMissing: string[]
+      languagesUsable: string[]
+      marathiSupported: boolean
     }>('/extraction/ocr-capability', { role }),
 
   runReconciliation: (role: string, applicationId: string) =>
@@ -226,7 +328,7 @@ export const api = {
     }),
 
   resubmitApplication: (role: string, applicationId: string, note = '') =>
-    request<ApplicationDetail>(`/applications/${applicationId}/resubmit`, {
+    request<ApplicantApplication>(`/applications/${applicationId}/resubmit`, {
       method: 'POST',
       role,
       headers: { 'Content-Type': 'application/json' },
@@ -389,28 +491,83 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  searchAudit: (
-    role: string,
-    params: {
-      action?: string
-      actor?: string
-      applicationId?: string
-      q?: string
-      limit?: number
-      offset?: number
-    } = {},
-  ) => {
-    const q = new URLSearchParams()
-    if (params.action) q.set('action', params.action)
-    if (params.actor) q.set('actor', params.actor)
-    if (params.applicationId) q.set('application_id', params.applicationId)
-    if (params.q) q.set('q', params.q)
-    if (params.limit != null) q.set('limit', String(params.limit))
-    if (params.offset != null) q.set('offset', String(params.offset))
-    const qs = q.toString()
-    return request<AdminAuditPage>(`/admin/audit${qs ? `?${qs}` : ''}`, { role })
-  },
+  searchAudit: (role: string, params: AuditSearchParams = {}) =>
+    request<AdminAuditPage>(`/admin/audit${auditQuery(params)}`, { role }),
 
+  auditFacets: (role: string) => request<AuditFacets>('/admin/audit/facets', { role }),
+
+  getAuditEvent: (role: string, id: string) =>
+    request<AdminAuditDetail>(`/admin/audit/${encodeURIComponent(id)}`, { role }),
+
+  exportAuditCsv: (role: string, params: AuditSearchParams = {}) =>
+    requestBlob(`/admin/audit/export.csv${auditQuery({ ...params, limit: undefined, offset: undefined })}`, role),
+
+  verifyAuditChain: (role: string) =>
+    request<{ ok: boolean; checked: number; firstBadSequence: number | null; detail: string }>(
+      '/admin/audit-chain/verify',
+      { role },
+    ),
+
+  // ---- Integrations & system health (admin) ----------------------------------
+  listIntegrations: (role: string) => request<IntegrationList>('/admin/integrations', { role }),
+
+  setIntegrationEnabled: (role: string, id: string, enabled: boolean, reason: string) =>
+    request<Integration>(`/admin/integrations/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, reason }),
+    }),
+
+  checkIntegration: (role: string, id: string) =>
+    request<Integration>(`/admin/integrations/${encodeURIComponent(id)}/check`, {
+      method: 'POST',
+      role,
+    }),
+
+  systemHealth: (role: string) => request<SystemHealth>('/admin/system-health', { role }),
+
+  // ---- Rule import, drafts, usage (admin) ------------------------------------
+  validateRuleImport: (role: string, jsonText: string) =>
+    request<RuleImportValidation>('/admin/rules/import/validate', {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ json_text: jsonText }),
+    }),
+
+  importRules: (role: string, jsonText: string) =>
+    request<RuleImportResult>('/admin/rules/import', {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ json_text: jsonText }),
+    }),
+
+  draftRuleFromText: (role: string, text: string) =>
+    request<RuleDraftProposal>('/admin/rules/draft-from-text', {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }),
+
+  saveRuleDraft: (role: string, rules: Array<Record<string, unknown>>) =>
+    request<RuleImportResult>('/admin/rules/drafts', {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules }),
+    }),
+
+  discardRuleDraft: (role: string, ruleId: string, version: string, reason: string) =>
+    request<AdminRule>(
+      `/admin/rules/${ruleId}/versions/${encodeURIComponent(version)}/discard?reason=${encodeURIComponent(reason)}`,
+      { method: 'POST', role },
+    ),
+
+  getRuleUsage: (role: string, ruleId: string) =>
+    request<RuleUsage>(`/admin/rules/${ruleId}/usage`, { role }),
   // ---- Phase 7 document verification ------------------------------------
   listDocVerificationConfigs: (role: string) =>
     request<
@@ -447,4 +604,46 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
+
+  // ---- Scrutiny review (officer/admin) -------------------------------------
+  getScrutinyReview: (role: string, applicationId: string) =>
+    request<ScrutinyReview>(`/applications/${applicationId}/scrutiny-review`, { role }),
+
+  getDocumentReport: (role: string, applicationId: string, documentId: string) =>
+    request<DocumentReport>(`/applications/${applicationId}/documents/${documentId}/report`, {
+      role,
+    }),
+
+  /** Stored file as a Blob (the endpoint needs auth headers, so an <iframe src> cannot be used). */
+  fetchDocumentFile: (role: string, documentId: string) =>
+    requestBlob(`/documents/${documentId}/file`, role),
+
+  downloadScrutinyPdf: (role: string, applicationId: string) =>
+    requestBlob(`/applications/${applicationId}/report.pdf`, role),
+
+  // ---- Handbook references (admin) -----------------------------------------
+  listHandbookReferences: (role: string) =>
+    request<HandbookReferenceAdmin[]>('/admin/handbook-references', { role }),
+
+  saveHandbookReference: (
+    role: string,
+    body: {
+      reference_key: string
+      edition: string
+      section: string
+      page: string
+      title: string
+      source_note: string
+      verified: boolean
+    },
+  ) =>
+    request<HandbookReferenceAdmin>('/admin/handbook-references', {
+      method: 'PUT',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  deleteHandbookReference: (role: string, id: string) =>
+    request<{ ok: boolean }>(`/admin/handbook-references/${id}`, { method: 'DELETE', role }),
 }

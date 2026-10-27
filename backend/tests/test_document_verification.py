@@ -11,6 +11,7 @@ def _create_app(client):
         headers=auth_headers("applicant"),
         json={
             "category_code": "NEW-ENG",
+            "institution_name": "Test Institute of Technology",
             "program_name": "B.Tech CSE",
             "academic_year": "2025-26",
         },
@@ -77,10 +78,15 @@ def test_layer1_fail_does_not_imply_authenticity(client):
 def test_payment_receipt_pipeline_and_rbac(client):
     app = _create_app(client)
     _upload(client, app["id"], "AICTE_PAYMENT_RECEIPT", "aicte_payment_receipt.pdf")
-    # Applicant can trigger
-    ok = client.post(
+    # Internal verification is staff-only; an applicant must not be able to trigger or read it.
+    denied = client.post(
         f"/api/v1/applications/{app['id']}/document-verification",
         headers=auth_headers("applicant"),
+    )
+    assert denied.status_code == 403
+    ok = client.post(
+        f"/api/v1/applications/{app['id']}/document-verification",
+        headers=auth_headers("officer"),
     )
     assert ok.status_code == 200, ok.text
     run = ok.json()[0]

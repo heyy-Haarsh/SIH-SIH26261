@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def to_camel(string: str) -> str:
@@ -23,6 +23,12 @@ class HealthResponse(CamelModel):
     database: str
     storage_backend: str
     demo_auth: bool
+    app_version: str = "0.1.0"
+    max_upload_mb: int | None = None
+    auto_extract_on_upload: bool | None = None
+    enable_live_verification: bool | None = None
+    enable_nominatim_geocode: bool | None = None
+    limitations: list[str] = Field(default_factory=list)
 
 
 class EvidenceOut(CamelModel):
@@ -59,6 +65,19 @@ class DocumentRequirementOut(CamelModel):
     allowed_types: list[str]
 
 
+class DocumentCheckOut(CamelModel):
+    """Plain-language upload pre-check (type match + clarity). Not an authenticity result."""
+
+    type_match: str  # matched | mismatch | unclear | not_checked
+    type_match_message: str
+    expected_type: str
+    detected_type: str | None = None
+    clarity: str  # clear | unclear | unreadable | not_checked
+    clarity_message: str
+    language_note: str | None = None
+    needs_attention: bool = False
+
+
 class DocumentOut(CamelModel):
     id: str
     name: str
@@ -81,6 +100,7 @@ class DocumentOut(CamelModel):
     external_verification_status: str | None = None
     review_status: str | None = None
     latest_verification_run_id: str | None = None
+    document_check: DocumentCheckOut | None = None
 
 
 class ExtractedFieldOut(CamelModel):
@@ -237,7 +257,10 @@ class ApplicationSummaryOut(CamelModel):
     status: str
     priority: str
     deficiency_count: int
+    # Open issues as the scrutiny review counts them (not the raw rule-finding rows).
     finding_count: int
+    stage: str = "awaiting_scrutiny"
+    stage_label: str = "Awaiting scrutiny"
     requires_manual_review: bool
     priority_score: int | None = None
     score_config_version: str | None = None
@@ -313,8 +336,27 @@ class FindingResolveIn(BaseModel):
 
 class ApplicationCreateIn(BaseModel):
     category_code: str
+    institution_name: str = Field(min_length=1, max_length=255)
     program_name: str
     academic_year: str
+
+    @field_validator("institution_name")
+    @classmethod
+    def _clean_institution_name(cls, v: str) -> str:
+        cleaned = " ".join((v or "").split())
+        if len(cleaned) < 3:
+            raise ValueError("Institution name must be at least 3 characters.")
+        if not any(ch.isalpha() for ch in cleaned):
+            raise ValueError("Institution name must contain letters.")
+        return cleaned
+
+    @field_validator("program_name", "academic_year")
+    @classmethod
+    def _strip_required(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("This field is required.")
+        return cleaned
 
 
 class ValidationRunOut(CamelModel):
@@ -330,3 +372,106 @@ class UploadResultOut(CamelModel):
     extraction_status: str | None = None
     findings: list[FindingOut] = Field(default_factory=list)
     file_checks: dict[str, Any]
+    # Explicit pipeline honesty — file accept ≠ extraction/validation success
+    pipeline_ok: bool = True
+    pipeline_warnings: list[str] = Field(default_factory=list)
+    document_check: DocumentCheckOut | None = None
+    document_version: int | None = None
+    replaced_previous: bool = False
+
+
+class UploadPolicyOut(CamelModel):
+    """Limits the client validates against before sending a file (server still enforces)."""
+
+    max_upload_mb: int
+    max_upload_bytes: int
+    allowed_extensions: list[str]
+    ocr_available: bool
+    ocr_languages: list[str]
+    marathi_supported: bool
+    ocr_message: str
+
+
+# ---- Applicant-facing view (no extracted fields, scores, forensics or technical codes) ----
+
+
+class ApplicantDocumentVersionOut(CamelModel):
+    version: int
+    file_name: str
+    uploaded_at: datetime
+    size_bytes: int
+
+
+class ApplicantDocumentOut(CamelModel):
+    id: str
+    file_name: str
+    version: int
+    uploaded_at: datetime
+    size_bytes: int
+    document_check: DocumentCheckOut | None = None
+    previous_versions: list[ApplicantDocumentVersionOut] = Field(default_factory=list)
+
+
+class ApplicantRequirementOut(CamelModel):
+    code: str
+    name: str
+    mandatory: bool
+    allowed_types: list[str]
+    upload_status: str  # not_uploaded | uploaded | replaced | needs_attention
+    upload_status_label: str
+    document: ApplicantDocumentOut | None = None
+
+
+class ApplicantDeficiencyOut(CamelModel):
+    id: str
+    title: str
+    description: str
+    status: str  # open | responded | closed
+    applicant_response: str | None = None
+    responded_at: datetime | None = None
+    created_at: datetime
+    resolved_at: datetime | None = None
+
+
+class ApplicantHistoryEntryOut(CamelModel):
+    id: str
+    timestamp: datetime
+    label: str
+    detail: str | None = None
+
+
+class ApplicantApplicationOut(CamelModel):
+    id: str
+    application_number: str
+    institution_name: str
+    category: str
+    category_code: str
+    program_name: str
+    academic_year: str
+    status: str
+    status_label: str
+    status_message: str
+    submitted_at: datetime | None = None
+    requirements: list[ApplicantRequirementOut] = Field(default_factory=list)
+    deficiencies: list[ApplicantDeficiencyOut] = Field(default_factory=list)
+    history: list[ApplicantHistoryEntryOut] = Field(default_factory=list)
+    can_upload: bool = True
+    can_resubmit: bool = False
+    resubmit_blockers: list[str] = Field(default_factory=list)
+    required_total: int = 0
+    required_uploaded: int = 0
+
+
+class ApplicantApplicationSummaryOut(CamelModel):
+    id: str
+    application_number: str
+    institution_name: str
+    category: str
+    program_name: str
+    academic_year: str
+    status: str
+    status_label: str
+    submitted_at: datetime | None = None
+    open_clarifications: int = 0
+    required_total: int = 0
+    required_uploaded: int = 0

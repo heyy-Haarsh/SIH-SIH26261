@@ -10,31 +10,22 @@ import { ApplicationTable } from '@/components/applications/ApplicationTable'
 import { ApplicationStatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { api, ApiError } from '@/services/api'
 import { useRole } from '@/app/RoleContext'
-import type { ApplicationSummary } from '@/types'
-
-const QUEUE_STATUSES = new Set([
-  'submitted',
-  'processing',
-  'under_scrutiny',
-  'clarification_required',
-  'resubmitted',
-  'awaiting_review',
-  'under_review',
-  'deficiency',
-  'manual_review',
-])
+import type { ApplicationMetrics, ApplicationSummary } from '@/types'
 
 export function OfficerDashboard() {
   const { role } = useRole()
   const [apps, setApps] = useState<ApplicationSummary[]>([])
+  const [metrics, setMetrics] = useState<ApplicationMetrics | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
-    api
-      .listApplications(role)
-      .then(setApps)
+    Promise.all([api.listApplications(role), api.applicationMetrics(role)])
+      .then(([list, m]) => {
+        setApps(list)
+        setMetrics(m)
+      })
       .catch((err) =>
         setError(
           err instanceof ApiError
@@ -45,7 +36,12 @@ export function OfficerDashboard() {
       .finally(() => setLoading(false))
   }, [role])
 
-  const queue = useMemo(() => apps.filter((a) => QUEUE_STATUSES.has(a.status)), [apps])
+  // "Queue" = the officer's own turn (awaiting or under scrutiny). Applications waiting on the
+  // applicant are counted separately so they do not inflate the workload.
+  const queue = useMemo(
+    () => apps.filter((a) => a.stage === 'awaiting_scrutiny' || a.stage === 'under_scrutiny'),
+    [apps],
+  )
   const highPriority = useMemo(
     () =>
       [...queue]
@@ -54,17 +50,13 @@ export function OfficerDashboard() {
     [queue],
   )
 
+  const by = metrics?.byStage
   const stats = {
-    totalInQueue: queue.length,
-    underScrutiny: queue.filter((a) =>
-      ['under_scrutiny', 'under_review', 'awaiting_review', 'manual_review'].includes(a.status),
-    ).length,
-    clarification: queue.filter((a) =>
-      ['clarification_required', 'deficiency'].includes(a.status),
-    ).length,
-    manualReview: queue.filter((a) => a.requiresManualReview).length,
+    awaiting: by?.awaiting_scrutiny ?? 0,
+    underScrutiny: by?.under_scrutiny ?? 0,
+    waitingOnApplicant: by?.awaiting_applicant ?? 0,
+    manualReview: metrics?.requiresManualReview ?? 0,
   }
-
   return (
     <AppShell title="Scrutiny Dashboard" breadcrumbs={['Scrutiny Officer', 'Dashboard']}>
       <DemoBanner>
@@ -79,10 +71,10 @@ export function OfficerDashboard() {
       )}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="In queue" value={loading ? '…' : stats.totalInQueue} icon={ClipboardList} />
-        <StatCard label="Under scrutiny" value={stats.underScrutiny} icon={FileSearch} />
-        <StatCard label="Clarification required" value={stats.clarification} icon={AlertTriangle} />
-        <StatCard label="Needs manual review" value={stats.manualReview} icon={ShieldAlert} />
+        <StatCard label="Awaiting scrutiny" value={loading ? '…' : stats.awaiting} icon={ClipboardList} />
+        <StatCard label="Under scrutiny" value={loading ? '…' : stats.underScrutiny} icon={FileSearch} />
+        <StatCard label="Waiting on applicant" value={loading ? '…' : stats.waitingOnApplicant} icon={AlertTriangle} />
+        <StatCard label="Needs manual review" value={loading ? '…' : stats.manualReview} icon={ShieldAlert} />
       </div>
 
       <div className="mb-5 flex flex-wrap gap-2">

@@ -2,18 +2,20 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     admin,
+    applicant,
     applications,
     doc_verification,
     extraction,
     forensics,
     health,
     reconciliation,
+    scrutiny,
     workflow,
 )
+from app.core import runtime_config
 from app.core.config import get_settings
 from app.core.database import SessionLocal, init_db
 from app.core.errors import register_exception_handlers
@@ -31,6 +33,7 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         seed_if_empty(db)
+        runtime_config.load_from_db(db)
     finally:
         db.close()
     yield
@@ -57,17 +60,16 @@ def create_app() -> FastAPI:
 
     application.include_router(health.router, prefix="/api/v1")
     application.include_router(applications.router, prefix="/api/v1")
+    application.include_router(applicant.router, prefix="/api/v1")
+    application.include_router(scrutiny.router, prefix="/api/v1")
     application.include_router(extraction.router, prefix="/api/v1")
     application.include_router(reconciliation.router, prefix="/api/v1")
     application.include_router(forensics.router, prefix="/api/v1")
     application.include_router(workflow.router, prefix="/api/v1")
     application.include_router(doc_verification.router, prefix="/api/v1")
     application.include_router(admin.router, prefix="/api/v1")
+    # Single set of handlers (includes logging for unhandled errors; no stack traces to clients)
     register_exception_handlers(application)
-
-    @application.exception_handler(Exception)
-    async def unhandled_exception_handler(_request, _exc):  # type: ignore[no-untyped-def]
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     return application
 

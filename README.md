@@ -8,9 +8,11 @@ AI-assisted **application validation**, document authentication support, and reg
 
 ```
 praman/
-  frontend/     React + TypeScript + Vite + Tailwind
-  backend/      FastAPI + SQLAlchemy + Alembic
-  docs/         Architecture, API contracts, status
+  frontend/           React + TypeScript + Vite + Tailwind
+  backend/            FastAPI + SQLAlchemy + Alembic
+  simulated_issuers/  Separate FastAPI simulated HTTP issuers (port 8001)
+  docs/               Architecture, API contracts, integration research
+  PLAN.md / DECISIONS.md
 ```
 
 ## Prerequisites
@@ -60,13 +62,17 @@ Open http://localhost:5173
 
 Use the **Demo** role switcher in the top bar to move between Applicant, Scrutiny Officer, and Administrator. It is **not** secure authentication; the API still enforces role headers and resource checks.
 
-### 3. First working flow
+### 3. First working flow (seeded SIH scenarios)
 
-1. Switch to **Applicant**
-2. Open **New Application** → create (calls API)
-3. Open **Document Uploads** → paste the application id → upload a PDF
-4. Backend runs file checks + synthetic rules and returns findings
-5. Switch to **Scrutiny Officer** → Overview / Queue → open an application for the full details UI (mock-enriched demo records)
+1. Switch to **Applicant** — open **PRM-2025-1001** (mismatch / expired fire / unavailable payment source)
+2. Or create a new application and upload under Phase 7 codes (`FIRE_NOC`, `AICTE_PAYMENT_RECEIPT`, …)
+3. Switch to **Scrutiny Officer** → Queue → claim, run Verification / Forensics, request clarification
+4. Applicant responds on **Deficiency Notices** → resubmit
+5. Officer recommends/rejects with reasons (score is prioritization only)
+
+Full script: [Demo walkthrough](docs/DEMO_WALKTHROUGH.md). Setup/env: [Setup](docs/SETUP.md).
+
+> Fresh demo data: delete `backend/praman_dev.db` and restart the API so `seed_if_empty` reloads scenarios.
 
 ## Scripts
 
@@ -81,8 +87,27 @@ npm run build
 ### Backend
 
 ```bash
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 pytest -q
 uvicorn app.main:app --reload --port 8000
+```
+
+### Simulated issuers (optional HTTP Layer-2)
+
+```bash
+# from repo root — fails loudly if port busy (no silent port switch)
+set SIMULATED_ISSUERS_PORT=8001
+python -m simulated_issuers.main
+```
+
+Then set `USE_SIMULATED_HTTP_ISSUERS=true` and issuer base URLs in `backend/.env` (see `.env.example`).
+
+### Synthetic evaluation
+
+```bash
+cd backend
+python -m tests.synthetic.evaluate
 ```
 
 ## Roles
@@ -97,10 +122,14 @@ No additional application roles are defined.
 
 ## Documentation
 
+- [Setup](docs/SETUP.md)
+- [Demo walkthrough](docs/DEMO_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [API contracts](docs/API_CONTRACTS.md)
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md)
 - [Document extraction / OCR](docs/EXTRACTION.md)
+- [Integration research](docs/INTEGRATION_RESEARCH.md) (CCA trust roots, real APIs — research only)
+- [PLAN.md](PLAN.md) · [DECISIONS.md](DECISIONS.md)
 
 ### Optional OCR (scanned PDFs / images)
 

@@ -1,0 +1,71 @@
+{
+  "code": "AFFIDAVIT_2",
+  "requirement_code": "AFFIDAVIT_2",
+  "name": "Affidavit 2",
+  "display_name": "Affidavit 2",
+  "version": "v1",
+  "source_note": "SYNTHETIC",
+  "is_synthetic_rules": true,
+  "handbook_note": "[SYNTHETIC] Affidavit 2 demo rules — aph_clause values are TODO placeholders, not official APH citations.",
+  "layer1": {
+    "required_fields": [
+      {"field": "institution_name", "aph_clause": "TODO: fill from APH §X.Y", "severity": "failed"},
+      {"field": "signatory_name", "aph_clause": "TODO: fill from APH §X.Y", "severity": "failed"},
+      {"field": "signatory_designation", "aph_clause": "TODO: fill from APH §X.Y", "severity": "failed"},
+      {"field": "execution_date", "aph_clause": "TODO: fill from APH §X.Y", "severity": "failed"},
+      {"field": "execution_place", "aph_clause": "TODO: fill from APH §X.Y", "severity": "warning"},
+      {"field": "stamp_paper_ref", "aph_clause": "TODO: fill from APH §X.Y", "severity": "failed"},
+      {"field": "notary_details", "aph_clause": "TODO: fill from APH §X.Y", "severity": "warning"}
+    ],
+    "date_rules": [
+      {
+        "id": "EXEC_DATE_NOT_FUTURE",
+        "description": "Execution date must not be in the future",
+        "field": "execution_date",
+        "op": "lte",
+        "compare_to": "today",
+        "severity": "failed",
+        "aph_clause": "TODO: fill from APH §X.Y"
+      }
+    ],
+    "format_checks": [
+      {
+        "id": "STAMP_REF_FORMAT",
+        "description": "Stamp paper or e-stamp reference format",
+        "field": "stamp_paper_ref",
+        "regex": ".+",
+        "pattern_note": "TODO: insert stamp ref regex — placeholder accepts any non-empty value",
+        "severity": "warning",
+        "optional": true,
+        "message": "Stamp paper / e-stamp reference format check (placeholder pattern)",
+        "aph_clause": "TODO: fill from APH §X.Y"
+      }
+    ],
+    "arithmetic_checks": [],
+    "conditional_checks": [],
+    "cross_field_checks": []
+  },
+  "layer2": {
+    "connector": "affidavit_estamp_connector",
+    "fields_to_verify": ["stamp_paper_ref", "notary_details"],
+    "adapters": [
+      {"id": "pdf_signature", "claim_type": "digital_signature"},
+      {"id": "affidavit_estamp", "claim_type": "estamp", "required_authorized_source": true}
+    ]
+  },
+  "layer3": {
+    "require_review_when": ["rule_fail", "external_unavailable", "external_simulated", "signature_invalid"]
+  },
+  "extraction_hints": {
+    "page_references": true,
+    "fields": {
+      "institution_name": {"aliases": ["संस्था का नाम", "संस्थेचे नाव"]},
+      "signatory_name": {"aliases": ["हस्ताक्षरकर्ता", "स्वाक्षरकर्त्याचे नाव"]},
+      "signatory_designation": {"aliases": ["पदनाम"]},
+      "execution_date": {"aliases": ["तारीख"]},
+      "execution_place": {"aliases": ["स्थान"]},
+      "stamp_paper_ref": {"aliases": ["मुद्रांक", "e-stamp"]},
+      "notary_details": {"aliases": ["नोटरी"]}
+    }
+  }
+}

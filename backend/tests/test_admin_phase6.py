@@ -136,8 +136,11 @@ def test_rule_version_history_never_overwrites(client):
     assert "v1" in versions and "v2" in versions
     # Historical definition intact
     assert versions["v1"]["definition"] == v1_def
-    assert versions["v1"]["status"] == "published"
+    # Superseded versions are retired (kept, with a closed effective window) — never deleted/edited
+    assert versions["v1"]["status"] == "retired"
+    assert versions["v1"]["effectiveTo"] is not None
     assert versions["v2"]["status"] == "published"
+    assert versions["v2"]["effectiveTo"] is None
 
     # Duplicate version id rejected
     dup = client.post(

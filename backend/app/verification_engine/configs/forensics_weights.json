@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "weights": {
+    "metadata_anomaly": 0.05,
+    "malformed_structure": 0.20,
+    "unusual_modification": 0.10,
+    "signature_absent": 0.05,
+    "signature_invalid": 0.30,
+    "qr_mismatch": 0.25,
+    "near_duplicate": 0.15,
+    "duplicate_hash": 0.10,
+    "ela_anomaly": 0.25,
+    "hidden_text": 0.30,
+    "incremental_update_abuse": 0.20
+  }
+}

@@ -1,0 +1,6 @@
+Financial Year: 2024-25
+Auditor Name: A CA
+Issue Date: 2025-01-10
+Total Assets: 100
+Total Liabilities: 10
+Total Equity: 10

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.errors import NotFoundError
-from app.core.security import ensure_application_access, get_current_user, require_roles
+from app.core.security import ensure_application_access, require_roles
 from app.models.application import Application
 from app.models.enums import ReconciliationItemStatus, UserRole
 from app.models.user import User
@@ -27,7 +27,7 @@ router = APIRouter(tags=["reconciliation"])
 def start_reconciliation(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.APPLICANT, UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -53,7 +53,7 @@ def start_reconciliation(
 def latest_reconciliation(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -72,7 +72,7 @@ def latest_reconciliation(
 def list_reconciliation_items(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -90,7 +90,7 @@ def resolve_reconciliation_item(
     item_id: str,
     body: ReconciliationResolveIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     try:
         status = ReconciliationItemStatus(body.status.strip().lower())

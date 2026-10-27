@@ -1,0 +1,9 @@
+{
+  "FIRE-VERIFIED-001": {"status": "verified", "expiry": "2028-01-01"},
+  "FIRE-MISMATCH-001": {"status": "mismatch_detected", "mismatched_fields": ["institution_name"]},
+  "FIRE-EXPIRED-001": {"status": "expired", "expiry": "2020-06-30"},
+  "FIRE-PENDING-001": {"status": "verification_pending"},
+  "FIRE-UNAVAIL-001": {"status": "source_unavailable"},
+  "FIRE-MANUAL-001": {"status": "manual_review_required"},
+  "_default": {"status": "verification_pending"}
+}

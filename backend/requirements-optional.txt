@@ -1,0 +1,5 @@
+# Optional LLM + QR + transliteration — system degrades without these
+google-generativeai>=0.7
+openai>=1.0
+pyzbar>=0.1.9
+indic-transliteration>=2.3

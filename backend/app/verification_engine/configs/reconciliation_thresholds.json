@@ -1,0 +1,12 @@
+{
+  "version": "v1",
+  "defaults": {
+    "fuzzy_threshold": 85
+  },
+  "fields": {
+    "institution_name": {"fuzzy_threshold": 80},
+    "trust_name": {"fuzzy_threshold": 80},
+    "address": {"fuzzy_threshold": 75},
+    "registered_address": {"fuzzy_threshold": 75}
+  }
+}

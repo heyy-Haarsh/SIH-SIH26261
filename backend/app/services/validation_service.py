@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -22,7 +24,7 @@ from app.document_processing.types import (
     ModuleResult,
     ModuleStatus,
 )
-from app.services import reconciliation_service
+from app.services import findings_service, reconciliation_service
 from app.integrations.base import VerificationClaim, VerificationSource, VerificationStatus
 from app.integrations.registry import get_verification_adapter
 from app.models.application import Application
@@ -39,17 +41,36 @@ from app.services import workflow_service
 
 
 def _persist_finding(
-    db: Session, application_id: str, run_id: str, draft, *, extraction_run_id: str | None = None
+    db: Session,
+    application_id: str,
+    run_id: str,
+    draft,
+    *,
+    extraction_run_id: str | None = None,
+    prior: dict | None = None,
 ) -> Finding:
+    involved = {draft.document_id} if draft.document_id else set()
+    involved.update(ev.document_id for ev in draft.evidence if ev.document_id)
+    fingerprint = findings_service.finding_fingerprint(
+        rule_code=draft.rule_code,
+        document_id=draft.document_id,
+        title=draft.title,
+        description=draft.description,
+        versions_key=findings_service.versions_key_for(db, application_id, involved),
+    )
+    # An officer's earlier resolution carries over only for the *identical* issue on the *same*
+    # document versions. A replaced document produces a new fingerprint, so the issue reopens.
+    carried = (prior or {}).get(fingerprint)
     finding = Finding(
         application_id=application_id,
         validation_run_id=run_id,
         document_id=draft.document_id,
         extraction_run_id=extraction_run_id,
+        fingerprint=fingerprint,
         title=draft.title,
         description=draft.description,
         severity=draft.severity,
-        status=FindingStatus.OPEN,
+        status=carried[0] if carried else FindingStatus.OPEN,
         outcome=draft.outcome,
         rule_code=draft.rule_code,
         rule_name=draft.rule_name,
@@ -106,6 +127,11 @@ def run_validation(
     try:
         active_rule_map, disabled_rule_codes = _admin_cfg.active_rule_runtimes(db)
     except Exception:  # noqa: BLE001 — never fail validation solely because config lookup failed
+        # Falling back to built-in defaults silently would make administrator rule versions and
+        # switches look active while having no effect, so make the failure visible in the logs.
+        logging.getLogger("praman.validation").exception(
+            "Could not resolve administrator rule configuration; using built-in rule defaults"
+        )
         active_rule_map, disabled_rule_codes = None, set()
 
     module_results: list[ModuleResult] = [
@@ -300,9 +326,12 @@ def run_validation(
     )
     aggregation = aggregator.aggregate(drafts, module_results)
 
+    prior_resolved = findings_service.prior_resolutions(db, application.id)
     for draft in aggregation.findings:
         ext_id = extraction_run_by_doc.get(draft.document_id) if draft.document_id else None
-        _persist_finding(db, application.id, run.id, draft, extraction_run_id=ext_id)
+        _persist_finding(
+            db, application.id, run.id, draft, extraction_run_id=ext_id, prior=prior_resolved
+        )
 
     adapter = get_verification_adapter()
     outcome = adapter.verify(

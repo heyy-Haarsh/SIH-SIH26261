@@ -78,6 +78,21 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+        # Prefer structured dict details from intake rejections without stringifying secrets.
+        if isinstance(exc.detail, dict):
+            message = str(exc.detail.get("message") or exc.detail.get("detail") or "Request failed")
+            code = str(exc.detail.get("code") or f"http_{exc.status_code}")
+            extra = {
+                k: v
+                for k, v in exc.detail.items()
+                if k not in {"message", "detail", "code"}
+                and not any(s in str(k).lower() for s in ("secret", "password", "token", "content", "bytes"))
+            }
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=_body(message, code, **extra),
+                headers=getattr(exc, "headers", None),
+            )
         detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
         return JSONResponse(
             status_code=exc.status_code,

@@ -28,7 +28,8 @@ from app.models.enums import (
 from app.models.forensics import ForensicsIndicator
 from app.models.reconciliation import ReconciliationItem
 from app.models.review import DeficiencyNotice
-from app.models.validation import Finding, ValidationRun
+from app.models.validation import ValidationRun
+from app.services.findings_service import current_findings
 from app.core.seed import DEFAULT_DOCS
 
 SCORE_CONFIG_VERSION = "scrutiny-weights-v1"
@@ -141,12 +142,7 @@ def compute_scrutiny_score(db: Session, application: Application) -> ScoreResult
         )
 
     # Rule findings (open only)
-    findings = (
-        db.query(Finding)
-        .filter(Finding.application_id == application.id)
-        .order_by(Finding.created_at.desc())
-        .all()
-    )
+    findings = list(reversed(current_findings(db, application.id)))
     seen_titles: set[str] = set()
     for f in findings:
         status_val = f.status.value if hasattr(f.status, "value") else str(f.status)
@@ -298,7 +294,7 @@ def build_scrutiny_summary(db: Session, application: Application, score: ScoreRe
     """Application-level summary combining rules, checklist, recon, forensics."""
     open_findings = [
         f
-        for f in db.query(Finding).filter(Finding.application_id == application.id).all()
+        for f in current_findings(db, application.id)
         if (f.status.value if hasattr(f.status, "value") else str(f.status)) == "open"
     ]
     recon_open = (
@@ -372,18 +368,20 @@ def apply_score_to_application(db: Session, application: Application) -> ScoreRe
     application.priority_score = score.score
     application.score_config_version = score.config_version
     application.score_breakdown = score.to_dict()
-    application.scrutiny_summary = build_scrutiny_summary(db, application, score)
+    previous = dict(application.scrutiny_summary or {})
+    new_summary = build_scrutiny_summary(db, application, score)
+    # A recorded decision is history: re-scoring must never silently erase it.
+    for key in ("finalDecision", "finalDecisionReason", "finalDecisionAt", "finalDecisionBy"):
+        if key in previous:
+            new_summary[key] = previous[key]
+    application.scrutiny_summary = new_summary
     application.requires_manual_review = bool(
         score.score >= 25
         or any(c.weight_key in ("failed_finding", "forensics_authenticity_concern") for c in score.contributions)
         or not score.processing_complete
     )
     # Refresh finding / deficiency counts
-    application.finding_count = (
-        db.query(Finding)
-        .filter(Finding.application_id == application.id)
-        .count()
-    )
+    application.finding_count = len(current_findings(db, application.id))
     application.deficiency_count = (
         db.query(DeficiencyNotice)
         .filter(

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.errors import NotFoundError, UnprocessableError
-from app.core.security import ensure_application_access, get_current_user, require_roles
+from app.core.security import ensure_application_access, require_roles
 from app.models.application import Application
 from app.models.enums import ForensicsIndicatorStatus, UserRole
 from app.models.user import User
@@ -23,7 +23,7 @@ router = APIRouter(tags=["forensics"])
 def start_forensics(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.APPLICANT, UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -50,7 +50,7 @@ def start_forensics(
 def latest_forensics(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -69,7 +69,7 @@ def latest_forensics(
 def list_forensics_indicators(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -86,7 +86,7 @@ def resolve_forensics_indicator(
     indicator_id: str,
     body: ForensicsResolveIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     try:
         status = ForensicsIndicatorStatus(body.status.strip().lower())

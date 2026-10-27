@@ -26,6 +26,137 @@ class Layer1Result:
     limitations: list[str] = field(default_factory=list)
 
 
+def _parse_number(value: str | None) -> float | None:
+    if not value:
+        return None
+    raw = value.strip().replace(",", "")
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _evaluate_arithmetic_check(
+    ac: dict[str, Any], fields: dict[str, str], *, prefix: str
+) -> list[Layer1Check]:
+    check_id = str(ac.get("id") or "ARITHMETIC")
+    lhs_fields = ac.get("fields_lhs") or []
+    rhs_fields = ac.get("fields_rhs") or []
+    lhs_vals = [_parse_number(fields.get(f)) for f in lhs_fields]
+    rhs_vals = [_parse_number(fields.get(f)) for f in rhs_fields]
+    if any(v is None for v in lhs_vals + rhs_vals):
+        return [
+            Layer1Check(
+                check_code=f"{check_id}_INCOMPLETE",
+                title=f"{prefix}Arithmetic check incomplete: {check_id}",
+                detail=ac.get("description") or "Missing numeric fields for arithmetic check.",
+                outcome="warning",
+                severity="warning",
+                evidence={"lhs": lhs_fields, "rhs": rhs_fields},
+            )
+        ]
+    lhs = sum(lhs_vals)  # type: ignore[arg-type]
+    rhs = sum(rhs_vals)  # type: ignore[arg-type]
+    tol = float(ac.get("tolerance_pct") or 0.0)
+    denom = max(abs(rhs), 1e-9)
+    pct_diff = abs(lhs - rhs) / denom * 100.0
+    severity = str(ac.get("severity") or "failed")
+    if pct_diff <= tol:
+        return [
+            Layer1Check(
+                check_code=f"{check_id}_PASS",
+                title=f"{prefix}Arithmetic OK: {check_id}",
+                detail=ac.get("description") or f"LHS≈RHS within {tol}%",
+                outcome="pass",
+                severity="info",
+                evidence={"lhs": lhs, "rhs": rhs, "pct_diff": pct_diff, "aph_clause": ac.get("aph_clause")},
+            )
+        ]
+    outcome = "warning" if severity == "warning" else "fail"
+    return [
+        Layer1Check(
+            check_code=f"{check_id}_FAIL",
+            title=f"{prefix}Arithmetic mismatch: {check_id}",
+            detail=ac.get("description") or f"LHS={lhs} RHS={rhs} diff={pct_diff:.2f}%",
+            outcome=outcome,
+            severity=severity if severity in ("failed", "warning") else "failed",
+            evidence={"lhs": lhs, "rhs": rhs, "pct_diff": pct_diff, "aph_clause": ac.get("aph_clause")},
+        )
+    ]
+
+
+def _evaluate_conditional_check(
+    cc: dict[str, Any], fields: dict[str, str], *, prefix: str
+) -> list[Layer1Check]:
+    check_id = str(cc.get("id") or "CONDITIONAL")
+    cond_field = str(cc.get("condition_field") or "")
+    op = str(cc.get("condition_op") or "gt")
+    raw_threshold = str(cc.get("condition_value") or "")
+    if raw_threshold.upper().startswith("TODO"):
+        return [
+            Layer1Check(
+                check_code=f"{check_id}_TODO",
+                title=f"{prefix}Conditional check placeholder: {check_id}",
+                detail="condition_value is TODO — check skipped pending APH threshold.",
+                outcome="warning",
+                severity="warning",
+                evidence={"aph_clause": cc.get("aph_clause")},
+            )
+        ]
+    left = _parse_number(fields.get(cond_field))
+    right = _parse_number(raw_threshold)
+    if left is None or right is None:
+        return []
+    triggered = False
+    if op == "gt":
+        triggered = left > right
+    elif op == "gte":
+        triggered = left >= right
+    elif op == "lt":
+        triggered = left < right
+    elif op == "lte":
+        triggered = left <= right
+    elif op == "eq":
+        triggered = left == right
+    if not triggered:
+        return [
+            Layer1Check(
+                check_code=f"{check_id}_SKIP",
+                title=f"{prefix}Conditional not triggered: {check_id}",
+                detail=f"{cond_field}={left} did not meet {op} {right}",
+                outcome="pass",
+                severity="info",
+                evidence={"condition_field": cond_field, "value": left},
+            )
+        ]
+    missing = [
+        f for f in (cc.get("then_require") or []) if not (fields.get(f) or "").strip()
+    ]
+    severity = str(cc.get("severity") or "failed")
+    if missing:
+        outcome = "warning" if severity == "warning" else "fail"
+        return [
+            Layer1Check(
+                check_code=f"{check_id}_REQUIRE_MISSING",
+                title=f"{prefix}Conditional requirement missing: {check_id}",
+                detail=f"Condition met but missing: {', '.join(missing)}",
+                outcome=outcome,
+                severity=severity if severity in ("failed", "warning") else "failed",
+                evidence={"missing": missing, "aph_clause": cc.get("aph_clause")},
+            )
+        ]
+    return [
+        Layer1Check(
+            check_code=f"{check_id}_REQUIRE_OK",
+            title=f"{prefix}Conditional requirements present: {check_id}",
+            detail="Condition met and required fields present.",
+            outcome="pass",
+            severity="info",
+            evidence={"aph_clause": cc.get("aph_clause")},
+        )
+    ]
+
+
 def _parse_date(value: str | None) -> date | None:
     if not value:
         return None
@@ -67,16 +198,25 @@ def evaluate_layer1(
         )
         return Layer1Result(status="unreadable", checks=checks, limitations=["unreadable"])
 
-    for fname in l1.get("required_fields") or []:
+    for item in l1.get("required_fields") or []:
+        if isinstance(item, dict):
+            fname = str(item.get("field") or "").strip()
+            miss_severity = str(item.get("severity") or "failed")
+        else:
+            fname = str(item).strip()
+            miss_severity = "failed"
+        if not fname:
+            continue
         val = (fields.get(fname) or "").strip()
         if not val:
+            outcome = "warning" if miss_severity == "warning" else "fail"
             checks.append(
                 Layer1Check(
                     check_code=f"MISSING_{fname.upper()}",
                     title=f"{prefix}Missing required field: {fname}",
                     detail=f"Required field '{fname}' was not extracted or is empty.",
-                    outcome="fail",
-                    severity="failed",
+                    outcome=outcome,
+                    severity=miss_severity if miss_severity in ("failed", "warning", "info") else "failed",
                     evidence={"field": fname},
                 )
             )
@@ -112,20 +252,38 @@ def evaluate_layer1(
                 )
             )
             continue
-        pattern = fmt.get("pattern") or ".*"
+        pattern = fmt.get("pattern") or fmt.get("regex") or ".*"
+        if str(pattern).upper().startswith("TODO"):
+            continue
+        fmt_severity = str(fmt.get("severity") or "failed")
         if not re.match(pattern, val):
+            outcome = "warning" if fmt_severity == "warning" else "fail"
             checks.append(
                 Layer1Check(
                     check_code=f"FORMAT_{fname.upper()}",
                     title=f"{prefix}Invalid format: {fname}",
                     detail=fmt.get("message") or f"Value does not match expected format for {fname}.",
-                    outcome="fail",
-                    severity="failed",
+                    outcome=outcome,
+                    severity=fmt_severity if fmt_severity in ("failed", "warning") else "failed",
                     evidence={"field": fname, "value_preview": val[:80], "pattern": pattern},
                 )
             )
 
-    for dc in l1.get("date_checks") or []:
+    date_checks = list(l1.get("date_checks") or [])
+    for dr in l1.get("date_rules") or []:
+        # Plan-style date_rules → internal date_checks
+        converted: dict[str, Any] = {"field": dr.get("field"), "ambiguous_is_manual": True}
+        if dr.get("op") == "lte" and dr.get("compare_to") == "today":
+            converted["not_future"] = True
+        if "not_future" in dr:
+            converted["not_future"] = bool(dr["not_future"])
+        if "not_expired" in dr:
+            converted["not_expired"] = bool(dr["not_expired"])
+        if "max_age_days" in dr:
+            converted["max_age_days"] = dr["max_age_days"]
+        date_checks.append(converted)
+
+    for dc in date_checks:
         fname = dc.get("field")
         if not fname:
             continue
@@ -223,6 +381,12 @@ def evaluate_layer1(
                         evidence={"fields": dict(present)},
                     )
                 )
+
+    for ac in l1.get("arithmetic_checks") or []:
+        checks.extend(_evaluate_arithmetic_check(ac, fields, prefix=prefix))
+
+    for cc in l1.get("conditional_checks") or []:
+        checks.extend(_evaluate_conditional_check(cc, fields, prefix=prefix))
 
     outcomes = {c.outcome for c in checks}
     if "unreadable" in outcomes:

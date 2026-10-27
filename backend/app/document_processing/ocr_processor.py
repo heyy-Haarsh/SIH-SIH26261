@@ -15,7 +15,8 @@ logger = logging.getLogger("praman.ocr")
 def tesseract_status() -> dict:
     """Detect Tesseract executable and configured languages without requiring OCR to succeed."""
     settings = get_settings()
-    wanted = [x.strip() for x in settings.ocr_languages.split(",") if x.strip()]
+    # Support both "eng,hin,mar" and "eng+hin+mar"
+    wanted = settings.ocr_language_list
     status = {
         "enabled": settings.enable_local_ocr,
         "pytesseract_installed": False,
@@ -23,7 +24,9 @@ def tesseract_status() -> dict:
         "tesseract_version": None,
         "languages_requested": wanted,
         "languages_available": [],
+        "languages_usable": [],
         "languages_missing": wanted[:],
+        "marathi_supported": False,
         "available": False,
         "message": "",
     }
@@ -52,17 +55,28 @@ def tesseract_status() -> dict:
         try:
             langs = pytesseract.get_languages(config="")
             status["languages_available"] = sorted(langs)
+            usable = [l for l in wanted if l in langs]
             missing = [l for l in wanted if l not in langs]
+            status["languages_usable"] = usable
             status["languages_missing"] = missing
-            if missing:
+            status["marathi_supported"] = "mar" in usable
+            if not usable:
                 status["message"] = (
                     f"Tesseract language data missing for: {', '.join(missing)}. "
                     f"Available: {', '.join(sorted(langs)[:20])}."
                 )
                 status["available"] = False
+            elif missing:
+                # Degrade: OCR still runs with the installed languages; state what is lost.
+                status["available"] = True
+                status["message"] = (
+                    f"OCR ready for {'+'.join(usable)}. Missing language data for: "
+                    f"{', '.join(missing)} — text in those scripts (e.g. Marathi 'mar', "
+                    "Hindi 'hin') may be unreadable until the tessdata files are installed."
+                )
             else:
                 status["available"] = True
-                status["message"] = f"OCR ready (langs={','.join(wanted)})."
+                status["message"] = f"OCR ready (langs={'+'.join(usable)})."
         except Exception as exc:  # noqa: BLE001
             status["message"] = f"Could not list Tesseract languages: {exc.__class__.__name__}"
         return status
@@ -93,8 +107,8 @@ class OCRProcessor:
         import pytesseract
         from PIL import Image
 
-        settings = get_settings()
-        langs = "+".join(x.strip() for x in settings.ocr_languages.split(",") if x.strip()) or "eng"
+        usable = self._status.get("languages_usable") or []
+        langs = "+".join(usable) or "eng"
 
         if image.mode not in ("RGB", "L"):
             image = image.convert("RGB")

@@ -1,8 +1,8 @@
 """Authorized-source adapters for payments, building, fire, engineer, auditor.
 
-No live authorized AICTE/municipal/council connectors are configured in this build.
-Every call returns SOURCE_UNAVAILABLE or MANUAL_VERIFICATION_REQUIRED — never a
-fabricated verified_by_source result.
+Prefer HTTP simulated-issuer connectors via the registry. This module remains
+as a last-resort stub when no HTTP client is configured — always honest
+SOURCE_UNAVAILABLE / never fabricated verified_by_source.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.core.config import settings
-from app.integrations.registry import get_verification_adapter
 from app.models.enums import VerificationSource, VerificationStatus
 from app.verification_engine.adapters.types import AdapterContext, AdapterResult
 
@@ -40,10 +39,16 @@ _ADAPTER_META = {
         "label": "Auditor credential registry",
         "detail": "No authorized auditor/CA registry connector is configured.",
     },
+    "affidavit_estamp": {
+        "claim_type": "estamp",
+        "label": "Affidavit e-stamp registry",
+        "detail": "No authorized e-stamp verification API is configured in this build.",
+    },
 }
 
 
 def verify_authorized_stub(adapter_id: str, ctx: AdapterContext) -> AdapterResult:
+    """Fallback when HTTP simulated issuer is not used."""
     now = datetime.now(timezone.utc)
     meta = _ADAPTER_META.get(adapter_id)
     if not meta:
@@ -54,36 +59,37 @@ def verify_authorized_stub(adapter_id: str, ctx: AdapterContext) -> AdapterResul
             source=VerificationSource.AUTHORIZED_LIVE,
             detail=f"Unknown adapter '{adapter_id}'.",
             checked_at=now,
+            mode="REAL",
+            official_verification=False,
+            provider_name=adapter_id,
+            request_summary="stub",
+            response_summary="unknown adapter",
+            scope_of_confirmation="none",
         )
 
-    # If global live verification is on, still no connector — honest unavailable.
-    # If mock adapter mode, label simulated explicitly when ENABLE_LIVE is false
-    # and a simulated path is requested via settings.
+    detail = meta["detail"]
     if settings.enable_live_verification:
-        return AdapterResult(
-            adapter=adapter_id,
-            claim_type=meta["claim_type"],
-            status=VerificationStatus.SOURCE_UNAVAILABLE,
-            source=VerificationSource.AUTHORIZED_LIVE,
-            detail=meta["detail"] + " Live flag is on but connector is not implemented.",
-            checked_at=now,
-            evidence={"fields_keys": sorted(ctx.fields.keys())},
-            limitations=["Authorized live connector not implemented"],
-        )
+        detail += " Live flag is on but connector is not implemented."
+    else:
+        detail += " Returning SOURCE_UNAVAILABLE (not simulated as verified)."
 
-    # Optional: if demo mock adapter is active for app-level claims, still do NOT
-    # invent source-confirmed payment/credential results for Phase 7 document adapters.
-    _ = get_verification_adapter()
     return AdapterResult(
         adapter=adapter_id,
         claim_type=meta["claim_type"],
         status=VerificationStatus.SOURCE_UNAVAILABLE,
         source=VerificationSource.AUTHORIZED_LIVE,
-        detail=meta["detail"] + " Returning SOURCE_UNAVAILABLE (not simulated as verified).",
+        detail=detail,
         checked_at=now,
+        mode="REAL",
+        official_verification=False,
+        provider_name=meta["label"],
+        request_summary=f"stub fields={sorted(ctx.fields.keys())}",
+        response_summary="source_unavailable",
+        scope_of_confirmation="none — stub only",
         evidence={"label": meta["label"], "fields_keys": sorted(ctx.fields.keys())},
         limitations=[
             "No authorized source integrated",
             "Layer 1 pass must not be treated as authenticity confirmation",
+            f"Configure {adapter_id} HTTP issuer or credentials to enable checks",
         ],
     )

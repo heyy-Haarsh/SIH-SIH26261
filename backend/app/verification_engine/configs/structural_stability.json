@@ -13,7 +13,20 @@
       {"field": "valid_until", "not_expired": true, "optional": true, "ambiguous_is_manual": true}
     ],
     "format_checks": [],
-    "cross_field_checks": []
+    "cross_field_checks": [],
+    "arithmetic_checks": [],
+    "conditional_checks": [
+      {
+        "id": "STRUCTURAL_CERT_AGE",
+        "condition_field": "building_age_years",
+        "condition_op": "gt",
+        "condition_value": "30",
+        "then_require": ["structural_stability_certificate"],
+        "severity": "failed",
+        "aph_clause": "TODO: fill from APH §X.Y",
+        "source_note": "SYNTHETIC"
+      }
+    ]
   },
   "layer2": {
     "adapters": [

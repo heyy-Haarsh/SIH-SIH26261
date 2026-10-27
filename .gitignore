@@ -43,6 +43,8 @@ backend/storage/
 *.sqlite
 *.sqlite3
 praman_dev.db
+backend/praman_dev.db
+tests/test_praman.db
 backend/tests/test_praman.db
 backend/tests/_test_uploads/
 

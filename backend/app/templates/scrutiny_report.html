@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>PRAMAN Scrutiny Report</title>
+  <style>
+    body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; margin: 2rem; line-height: 1.45; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.15rem; margin-top: 1.5rem; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
+    .notice { background: #f5f5f0; border-left: 4px solid #555; padding: 0.75rem 1rem; margin: 1rem 0; }
+    .badge { font-size: 0.75rem; font-weight: bold; letter-spacing: 0.04em; }
+    .sim { color: #8a4b08; }
+    .real { color: #0b5; }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    th, td { border: 1px solid #ddd; padding: 0.4rem 0.5rem; text-align: left; vertical-align: top; font-size: 0.9rem; }
+    th { background: #f0f0f0; }
+    .signoff { margin-top: 2rem; min-height: 4rem; border-top: 1px dashed #999; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PRAMAN Scrutiny Report</h1>
+    <p>Application: {{ report.application_id }} · Rule-set: {{ report.rule_set_version }} · Engine: {{ report.engine_version }}</p>
+    <p>Generated: {{ generated_at }}</p>
+  </header>
+
+  <div class="notice"><strong>{{ decision_notice }}</strong></div>
+  <div class="notice">{{ report.report_disclaimer }}</div>
+
+  <h2>Application summary</h2>
+  <p>Overall status: {{ report.overall_status }} · Documents: {{ report.documents|length }}</p>
+  <p>Triage score: {{ report.triage_score_breakdown.total }} ({{ report.triage_score_breakdown.interpretation }})</p>
+
+  <h2>Per-document findings</h2>
+  {% for doc in report.documents %}
+  <h3>{{ doc.requirement_code }} <span class="badge">({{ doc.document_id }})</span></h3>
+  <p>
+    Rule: {{ doc.rule_validation_status }} ·
+    External: {{ doc.external_verification_status }} ·
+    Review: {{ doc.review_status }} ·
+    Signature: {{ doc.signature_status }} ·
+    Official source confirmed: {{ doc.official_source_confirmed }}
+  </p>
+  <table>
+    <thead><tr><th>Rule</th><th>Severity</th><th>Message</th><th>Evidence</th></tr></thead>
+    <tbody>
+    {% for f in doc.findings %}
+      <tr>
+        <td>{{ f.rule_id }}</td>
+        <td>{{ f.severity }}</td>
+        <td>{{ f.message }}</td>
+        <td>{% for e in f.evidence %}{{ e.snippet }}{% if e.original_value %} [raw: {{ e.original_value }}]{% endif %}{% if e.normalized_value %} [norm: {{ e.normalized_value }}]{% endif %}<br/>{% endfor %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4">No findings recorded.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>Mode</th><th>Provider</th><th>Status</th><th>Official</th><th>Scope</th></tr></thead>
+    <tbody>
+    {% for v in doc.verification_results %}
+      <tr>
+        <td class="badge {% if v.mode == 'SIMULATED' %}sim{% else %}real{% endif %}">[{{ v.mode }}]</td>
+        <td>{{ v.provider_name }}</td>
+        <td>{{ v.status }}</td>
+        <td>{{ v.official_verification }}</td>
+        <td>{{ v.scope_of_confirmation }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+
+  <h2>Cross-document findings</h2>
+  {% if report.cross_doc_findings %}
+  <ul>{% for f in report.cross_doc_findings %}<li>{{ f.message }}</li>{% endfor %}</ul>
+  {% else %}
+  <p>None recorded in this report.</p>
+  {% endif %}
+
+  <h2>Recommended actions</h2>
+  <ul>
+    <li>Review documents marked manual_review_required or source_unavailable.</li>
+    <li>Do not treat SIMULATED results as official verification.</li>
+    <li>Confirm trust-store configuration for digitally signed PDFs when required.</li>
+  </ul>
+
+  <div class="signoff">
+    <p><strong>Reviewer sign-off</strong></p>
+    <p>Name: ______________________ &nbsp; Role: ______________________ &nbsp; Date: __________</p>
+    <p>Signature: ______________________________________________</p>
+  </div>
+</body>
+</html>

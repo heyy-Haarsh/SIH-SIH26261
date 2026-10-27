@@ -1,0 +1,122 @@
+%% PRAMAN (SIH26261) — System Architecture v1
+%% Source of truth: repository implementation as of diagram generation.
+%% Legend styles: implemented (solid) | simulated (dashed) | planned/external-dependent (dotted)
+%% Core principle: OCR success or Layer-1 rule pass does NOT prove authenticity; officer retains final decision.
+
+flowchart TB
+  %% ===== USERS =====
+  subgraph USERS["Users / Roles"]
+    direction LR
+    APP["Institution / Applicant<br/>create · upload · deficiencies · resubmit"]
+    OFF["AICTE Scrutiny Officer<br/>queue · claim · verify · clarify · recommend/reject"]
+    ADM["System Administrator<br/>users · categories · rules · settings · audit"]
+  end
+
+  %% ===== FRONTEND =====
+  subgraph FE["Frontend — React + TypeScript + Vite + Tailwind"]
+    direction LR
+    FE_A["Applicant UI<br/>Dashboard · Applications · New · Uploads · Deficiencies<br/>(placeholders: checklist / precheck / history)"]
+    FE_O["Officer UI<br/>Dashboard · Queue · Application Detail · Comparison<br/>(placeholders: viewer / findings / reports / decisions)"]
+    FE_AD["Admin UI<br/>Dashboard · Users · Categories · Requirements · Rules · Audit · Settings<br/>(placeholders: integrations / health)"]
+    FE_AUTH["Demo role switcher<br/>X-Demo-Role headers — NOT production SSO"]
+  end
+
+  %% ===== BACKEND =====
+  subgraph BE["Backend API — FastAPI · /api/v1 · SQLAlchemy · Alembic"]
+    direction TB
+    AUTH["Auth / RBAC<br/>X-Demo-Role → seeded User<br/>require_roles · ensure_application_access"]
+    ROUTES["Routers<br/>applications · extraction · reconciliation · forensics<br/>workflow · doc_verification · admin · health"]
+    SVC["Services<br/>document · validation · workflow · scoring<br/>doc_verification · forensics · reconciliation · admin · audit"]
+    WORKERS["Job runner<br/>local synchronous enqueue<br/>Celery/Redis: planned / not default"]
+  end
+
+  %% ===== DOCUMENT INTELLIGENCE =====
+  subgraph DI["Document Intelligence — document_processing/"]
+    direction LR
+    INT["Intake<br/>type/size/magic/SHA-256"]
+    CLS["Classify<br/>requirement + semantic heuristic"]
+    EXT["PDF text / OCR<br/>PyMuPDF · Tesseract optional"]
+    FLD["Field extraction<br/>deterministic regex / KV"]
+    EVM["Evidence mapping<br/>page refs · bbox"]
+    FOR["Local forensics<br/>metadata/structure/signature heuristics"]
+    REC["Cross-doc reconciliation<br/>resolve + evidence"]
+  end
+
+  %% ===== THREE-LAYER VERIFICATION =====
+  subgraph VE["Three-Layer Verification Engine — verification_engine/"]
+    direction TB
+    noteVE["Independent statuses: ruleValidation ≠ externalVerification ≠ review<br/>Layer-1 PASS ≠ authenticity"]
+    L1["LAYER 1 — Rule Validation<br/>config JSON · required fields · formats · dates<br/>SYNTHETIC demo rules · RuleValidationStatus"]
+    L2["LAYER 2 — External / Local Adapters<br/>pdf_signature LOCAL · geocode_nominatim OPT-IN REAL<br/>HTTP → simulated_issuers SIMULATED<br/>or SOURCE_UNAVAILABLE if down / unconfigured"]
+    L3["LAYER 3 — Human Review Support<br/>review triggers · checks · JSON scrutiny_report<br/>officer resolve / final decision outside auto-approve"]
+  end
+
+  %% ===== DATA =====
+  subgraph DATA["Data Store"]
+    direction LR
+    DB["SQLite demo / PostgreSQL intended<br/>Users · Institutions · Applications · Documents · Versions<br/>ExtractedFields · ExtractionRuns · Rules · RuleVersions<br/>ValidationRuns · Findings · VerificationRequests<br/>DocVerificationRuns/Checks · Forensics · Reconciliation<br/>DeficiencyNotices · ReviewDecisions · AuditEvents · Settings"]
+    FS["Local uploads storage<br/>uploads/ · STORAGE_BACKEND=local<br/>MinIO: planned / external-dependent"]
+  end
+
+  %% ===== EXTERNAL =====
+  subgraph EXT_SYS["External / Optional"]
+    direction LR
+    OCR_EXT["Tesseract OCR<br/>REAL when installed + ENABLE_LOCAL_OCR"]
+    NOM["Nominatim OSM<br/>REAL opt-in ENABLE_NOMINATIM_GEOCODE"]
+    SIM["simulated_issuers :8001<br/>SIMULATED fire/building/engineer/<br/>payment/ICAI/e-stamp — official_verification=false"]
+    LIVE["Authorized live AICTE/gov APIs<br/>PLANNED / UNAVAILABLE — no live connector"]
+    AI["LLM extraction<br/>PLANNED — ENABLE_AI_EXTRACTION reserved"]
+  end
+
+  %% ===== OUTPUTS =====
+  subgraph OUT["Outputs / Decisions"]
+    direction LR
+    ST["Application statuses<br/>submitted → processing → under_scrutiny<br/>↔ clarification_required ↔ resubmitted<br/>→ recommended | rejected"]
+    FIND["Findings · deficiencies · verification outcomes<br/>L1/L2/L3 statuses · limitations"]
+    REP["JSON scrutiny_report on verification runs<br/>PDF/DOCX export: planned"]
+    DEC["Officer recommend / reject + audited reasons<br/>Priority score = prioritization aid only"]
+  end
+
+  %% ===== FLOWS =====
+  APP --> FE_A
+  OFF --> FE_O
+  ADM --> FE_AD
+  FE_AUTH --> AUTH
+  FE_A & FE_O & FE_AD --> ROUTES
+  ROUTES --> AUTH
+  AUTH --> SVC
+  SVC --> DI
+  SVC --> VE
+  SVC --> WORKERS
+  INT --> CLS --> EXT --> FLD --> EVM
+  EXT -.-> OCR_EXT
+  DI --> DATA
+  VE --> DATA
+  SVC --> DATA
+  L1 --> L2 --> L3
+  L2 -.-> SIM
+  L2 -.-> NOM
+  L2 -.-> LIVE
+  EXT -.-> AI
+  L3 --> FIND
+  SVC --> ST
+  VE --> REP
+  OFF --> DEC
+  DEC --> ST
+
+  %% Clarification feedback loop
+  OFF -->|clarification / deficiency| APP
+  APP -->|corrected upload · resubmit| INT
+  INT -->|re-extract · revalidate · re-verify| VE
+
+  classDef implemented fill:#E8F1F8,stroke:#1B3A5F,stroke-width:1.5px,color:#0F172A
+  classDef simulated fill:#FFF8E7,stroke:#B45309,stroke-width:1.5px,stroke-dasharray: 5 3,color:#0F172A
+  classDef planned fill:#F3F4F6,stroke:#6B7280,stroke-width:1.5px,stroke-dasharray: 2 2,color:#374151
+  classDef layer fill:#E6F4F1,stroke:#0F766E,stroke-width:2px,color:#0F172A
+  classDef user fill:#FFFFFF,stroke:#1B3A5F,stroke-width:2px,color:#0F172A
+
+  class APP,OFF,ADM,FE_A,FE_O,FE_AD,AUTH,ROUTES,SVC,INT,CLS,FLD,EVM,FOR,REC,L1,L3,DB,FS,ST,FIND,DEC user
+  class EXT,OCR_EXT,NOM layer
+  class FE_AUTH,SIM,L2 simulated
+  class WORKERS,LIVE,AI,REP planned
+  class L1,L2,L3 layer

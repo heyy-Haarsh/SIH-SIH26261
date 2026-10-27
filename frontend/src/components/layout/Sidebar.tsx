@@ -1,8 +1,8 @@
 import { clsx } from 'clsx'
 import { ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useRole } from '@/app/RoleContext'
-import { NAV_BY_ROLE } from '@/lib/nav'
+import { NAV_BY_ROLE, ROLE_HOME } from '@/lib/nav'
 
 export function Sidebar({
   collapsed,
@@ -13,6 +13,7 @@ export function Sidebar({
 }) {
   const { role } = useRole()
   const items = NAV_BY_ROLE[role]
+  const location = useLocation()
 
   return (
     <aside
@@ -38,25 +39,44 @@ export function Sidebar({
       </div>
 
       <nav className="scrollbar-thin flex-1 space-y-0.5 overflow-y-auto p-2">
-        {items.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === `/${role === 'applicant' ? 'applicant' : role === 'officer' ? 'officer' : 'admin'}`}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) =>
-              clsx(
-                'flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm font-medium transition-colors',
-                collapsed && 'justify-center px-0',
-                isActive
-                  ? 'bg-brand-soft text-brand'
-                  : 'text-ink-secondary hover:bg-surface-muted hover:text-ink',
-              )
-            }
-          >
-            <item.icon size={18} className="shrink-0" />
-            {!collapsed && <span className="truncate">{item.label}</span>}
-          </NavLink>
+        {items.map((item, index) => (
+          <div key={item.path}>
+            {item.section && !collapsed && (
+              <div
+                className={clsx(
+                  'px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted',
+                  index === 0 ? 'pt-1' : 'pt-3',
+                )}
+              >
+                {item.section}
+              </div>
+            )}
+            {item.section && collapsed && index > 0 && (
+              <div className="mx-2 my-2 border-t border-border" />
+            )}
+            <NavLink
+              to={item.path}
+              end={item.path === ROLE_HOME[role]}
+              title={collapsed ? item.label : undefined}
+              className={({ isActive }) => {
+                // "My Applications" also covers an application's own page, but not "New Application".
+                const active =
+                  item.path === '/applicant/applications'
+                    ? isActive && location.pathname !== '/applicant/applications/new'
+                    : isActive
+                return clsx(
+                  'flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm font-medium transition-colors',
+                  collapsed && 'justify-center px-0',
+                  active
+                    ? 'bg-brand-soft text-brand'
+                    : 'text-ink-secondary hover:bg-surface-muted hover:text-ink',
+                )
+              }}
+            >
+              <item.icon size={18} className="shrink-0" />
+              {!collapsed && <span className="truncate">{item.label}</span>}
+            </NavLink>
+          </div>
         ))}
       </nav>
 
@@ -73,3 +93,5 @@ export function Sidebar({
     </aside>
   )
 }
+
+

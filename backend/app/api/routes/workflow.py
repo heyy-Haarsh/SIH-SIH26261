@@ -9,6 +9,7 @@ from app.models.application import Application
 from app.models.enums import FindingStatus, UserRole
 from app.models.user import User
 from app.schemas.common import (
+    ApplicantApplicationOut,
     ApplicationDetailOut,
     DeficiencyOut,
     DeficiencyRespondIn,
@@ -19,7 +20,7 @@ from app.schemas.common import (
     WorkflowNoteIn,
     WorkflowResubmitIn,
 )
-from app.services import workflow_service
+from app.services import applicant_view_service, workflow_service
 from app.services.serializers import deficiency_to_out, finding_to_out
 
 router = APIRouter(tags=["workflow"])
@@ -29,7 +30,7 @@ router = APIRouter(tags=["workflow"])
 def start_scrutiny(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if app:
@@ -45,7 +46,7 @@ def request_clarification(
     application_id: str,
     body: WorkflowClarificationIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     return workflow_service.request_clarification(
         db,
@@ -65,7 +66,7 @@ def record_decision(
     application_id: str,
     body: WorkflowDecisionIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     return workflow_service.record_recommendation(
         db, user, application_id, recommend=body.recommend, reason=body.reason
@@ -77,19 +78,21 @@ def add_note(
     application_id: str,
     body: WorkflowNoteIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     return workflow_service.add_note(db, user, application_id, content=body.content)
 
 
-@router.post("/applications/{application_id}/resubmit", response_model=ApplicationDetailOut)
+@router.post("/applications/{application_id}/resubmit", response_model=ApplicantApplicationOut)
 def resubmit(
     application_id: str,
     body: WorkflowResubmitIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.APPLICANT)),
 ):
-    return workflow_service.resubmit(db, user, application_id, note=body.note)
+    # Applicants get the narrow applicant view back — never the internal scrutiny detail.
+    workflow_service.resubmit(db, user, application_id, note=body.note)
+    return applicant_view_service.get_applicant_application(db, user, application_id)
 
 
 @router.post(
@@ -99,7 +102,7 @@ def resubmit(
 def refresh_summary(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     return workflow_service.refresh_summary(db, user, application_id)
 
@@ -149,7 +152,7 @@ def resolve_finding(
     finding_id: str,
     body: FindingResolveIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     try:
         status = FindingStatus(body.status.strip().lower())

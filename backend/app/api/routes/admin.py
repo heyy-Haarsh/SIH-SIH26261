@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -13,6 +14,9 @@ from app.models.user import User
 from app.schemas.admin import (
     CategoryCreateIn,
     CategoryUpdateIn,
+    IntegrationToggleIn,
+    RuleDraftIn,
+    RuleImportIn,
     RuleCreateIn,
     RuleUpdateIn,
     RuleVersionCreateIn,
@@ -20,7 +24,14 @@ from app.schemas.admin import (
     UserCreateIn,
     UserUpdateIn,
 )
-from app.services import admin_service
+from app.schemas.scrutiny import HandbookReferenceIn
+from app.core.errors import UnprocessableError
+from app.services import (
+    admin_service,
+    integration_service,
+    rule_import_service,
+    system_health_service,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -272,9 +283,13 @@ def list_audit(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN)),
     action: Optional[str] = None,
+    category: Optional[str] = None,
     actor: Optional[str] = None,
+    actor_role: Optional[str] = None,
     application_id: Optional[str] = None,
+    application_number: Optional[str] = None,
     entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
     q: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
@@ -285,9 +300,13 @@ def list_audit(
         db,
         user,
         action=action,
+        category=category,
         actor=actor,
+        actor_role=actor_role,
         application_id=application_id,
+        application_number=application_number,
         entity_type=entity_type,
+        entity_id=entity_id,
         q=q,
         date_from=date_from,
         date_to=date_to,
@@ -295,11 +314,112 @@ def list_audit(
         offset=offset,
     )
     return {
-        "items": [admin_service.audit_event_to_dict(e) for e in items],
+        "items": admin_service.audit_events_to_dicts(db, items),
         "total": total,
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.get("/audit/facets")
+def audit_facets(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return admin_service.audit_facets(db, user)
+
+
+def _csv_cell(value: object) -> str:
+    text = "" if value is None else str(value)
+    # Neutralise spreadsheet formula injection from user-controlled text.
+    if text[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        text = "'" + text
+    return text
+
+
+@router.get("/audit/export.csv")
+def export_audit_csv(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+    action: Optional[str] = None,
+    category: Optional[str] = None,
+    actor: Optional[str] = None,
+    actor_role: Optional[str] = None,
+    application_id: Optional[str] = None,
+    application_number: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    q: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+):
+    import csv
+    import io
+    import json
+
+    filters = dict(
+        action=action,
+        category=category,
+        actor=actor,
+        actor_role=actor_role,
+        application_id=application_id,
+        application_number=application_number,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    rows = admin_service.audit_export_rows(db, user, **filters)
+    dicts = admin_service.audit_events_to_dicts(db, rows, full=True)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        ["timestamp", "action", "category", "actor", "actor_role", "application_number",
+         "entity_type", "entity_id", "detail", "metadata"]
+    )
+    for d in dicts:
+        writer.writerow(
+            [
+                _csv_cell(d["timestamp"].isoformat() if d["timestamp"] else ""),
+                _csv_cell(d["action"]),
+                _csv_cell(d["category"]),
+                _csv_cell(d["actor"]),
+                _csv_cell(d["actorRole"]),
+                _csv_cell(d["applicationNumber"]),
+                _csv_cell(d["entityType"]),
+                _csv_cell(d["entityId"]),
+                _csv_cell(d["detail"]),
+                _csv_cell(json.dumps(d["metadata"], default=str, sort_keys=True)),
+            ]
+        )
+    from app.services.audit_service import record_audit
+
+    record_audit(
+        db,
+        action="admin.audit_exported",
+        actor=user.name,
+        actor_id=user.id,
+        actor_role=user.role.value,
+        detail=f"rows={len(dicts)}",
+        entity_type="audit_export",
+        metadata={"rows": len(dicts), "filters": {k: str(v) for k, v in filters.items() if v}},
+    )
+    db.commit()
+    return Response(
+        content="\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="praman-audit-log.csv"'},
+    )
+
+
+@router.get("/audit/{event_id}")
+def get_audit_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return admin_service.audit_event_detail(db, user, event_id)
 
 
 @router.get("/jobs")
@@ -313,3 +433,193 @@ def list_jobs(_: User = Depends(require_roles(UserRole.ADMIN))):
         ),
         "jobs": [],
     }
+
+
+@router.get("/audit-chain/verify")
+def verify_audit_chain(
+    from_seq: Optional[int] = Query(None),
+    to_seq: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    _ = user
+    from app.services.audit_chain_service import verify_chain_integrity
+
+    result = verify_chain_integrity(db, from_seq=from_seq, to_seq=to_seq)
+    return {
+        "ok": result.ok,
+        "checked": result.checked,
+        "firstBadSequence": result.first_bad_sequence,
+        "detail": result.detail,
+    }
+
+
+# ---- handbook references (verified citations only) ------------------------------------
+
+
+@router.get("/handbook-references")
+def list_handbook_references(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    from app.services import handbook_service
+
+    _ = user
+    return [r.model_dump(by_alias=True, mode="json") for r in handbook_service.list_references(db)]
+
+
+@router.put("/handbook-references")
+def upsert_handbook_reference(
+    body: HandbookReferenceIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    from app.services import handbook_service
+
+    return handbook_service.upsert_reference(db, user, body).model_dump(by_alias=True, mode="json")
+
+
+@router.delete("/handbook-references/{reference_id}")
+def delete_handbook_reference(
+    reference_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    from app.services import handbook_service
+
+    handbook_service.delete_reference(db, user, reference_id)
+    return {"ok": True}
+
+
+
+# ---- rule import & drafting (never activates anything) -----------------------------
+
+
+@router.post("/rules/import/validate")
+def validate_rule_import(
+    body: RuleImportIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    items, file_errors = rule_import_service.parse_payload(body.json_text, body.rules)
+    results = rule_import_service.validate_items(db, items) if not file_errors or items else []
+    valid = not file_errors and bool(results) and all(r["valid"] for r in results)
+    return {
+        "valid": valid,
+        "fileErrors": file_errors,
+        "results": results,
+        "willCreate": sum(1 for r in results if r["valid"]),
+        "note": "Validation only. Importing saves drafts; nothing is activated.",
+    }
+
+
+@router.post("/rules/import", status_code=201)
+def import_rules(
+    body: RuleImportIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    items, file_errors = rule_import_service.parse_payload(body.json_text, body.rules)
+    if file_errors:
+        raise UnprocessableError(" ".join(file_errors), code="rule_import_invalid", extra={"fileErrors": file_errors})
+    return rule_import_service.import_items(db, user, items, origin="json_import")
+
+
+@router.post("/rules/draft-from-text")
+def draft_rule_from_text(
+    body: RuleDraftIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return rule_import_service.draft_from_text(db, body.text)
+
+
+@router.post("/rules/drafts", status_code=201)
+def save_rule_draft(
+    body: RuleImportIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    items, file_errors = rule_import_service.parse_payload(body.json_text, body.rules)
+    if file_errors:
+        raise UnprocessableError(" ".join(file_errors), code="rule_import_invalid", extra={"fileErrors": file_errors})
+    return rule_import_service.import_items(db, user, items, origin="natural_language")
+
+
+@router.post("/rules/{rule_id}/versions/{version}/discard")
+def discard_rule_draft(
+    rule_id: str,
+    version: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+    reason: str = Query(..., min_length=3, max_length=500),
+):
+    return admin_service.rule_to_dict(
+        admin_service.discard_draft_version(db, user, rule_id, version, change_reason=reason)
+    )
+
+
+@router.get("/rules/{rule_id}/usage")
+def rule_usage(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return admin_service.rule_usage(db, user, rule_id)
+
+
+# ---- integrations & system health ------------------------------------------------------
+
+
+@router.get("/integrations")
+def list_integrations(_: User = Depends(require_roles(UserRole.ADMIN))):
+    items = integration_service.list_integrations()
+    return {"items": items, "summary": integration_service.summarize(items)}
+
+
+@router.get("/integrations/{integration_id}")
+def get_integration(integration_id: str, _: User = Depends(require_roles(UserRole.ADMIN))):
+    return integration_service.get_integration(integration_id)
+
+
+@router.put("/integrations/{integration_id}")
+def toggle_integration(
+    integration_id: str,
+    body: IntegrationToggleIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return integration_service.set_integration_enabled(
+        db, user, integration_id, enabled=body.enabled, reason=body.reason
+    )
+
+
+@router.post("/integrations/{integration_id}/check")
+def check_integration(
+    integration_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    result = integration_service.check_integration(integration_id)
+    from app.services.audit_service import record_audit
+
+    record_audit(
+        db,
+        action="admin.integration_checked",
+        actor=user.name,
+        actor_id=user.id,
+        actor_role=user.role.value,
+        detail=f"{integration_id}: {(result.get('lastCheck') or {}).get('message', '')}",
+        entity_type="integration",
+        metadata={"integration": integration_id, "result": result.get("lastCheck")},
+    )
+    db.commit()
+    return result
+
+
+@router.get("/system-health")
+def get_system_health(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return system_health_service.system_health(db)

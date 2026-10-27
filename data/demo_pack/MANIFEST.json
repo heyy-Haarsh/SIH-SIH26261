@@ -1,0 +1,86 @@
+[
+  {
+    "file_txt": "01_FIRE_NOC_pass.txt",
+    "file_pdf": "01_FIRE_NOC_pass.pdf",
+    "requirement_code": "FIRE_NOC",
+    "expect": "Layer1 pass (synthetic). Layer2: SOURCE_UNAVAILABLE without issuers; SIMULATED verified if HTTP issuers on + FIRE-VERIFIED-001."
+  },
+  {
+    "file_txt": "02_FIRE_NOC_expired.txt",
+    "file_pdf": "02_FIRE_NOC_expired.pdf",
+    "requirement_code": "FIRE_NOC",
+    "expect": "Layer1 fail on expired Valid Until. Layer2 may also show expired if issuers on (FIRE-EXPIRED-001)."
+  },
+  {
+    "file_txt": "03_FIRE_NOC_missing_fields.txt",
+    "file_pdf": "03_FIRE_NOC_missing_fields.pdf",
+    "requirement_code": "FIRE_NOC",
+    "expect": "Layer1 fail \u2014 missing certificate_number / dates."
+  },
+  {
+    "file_txt": "04_PAYMENT_pass.txt",
+    "file_pdf": "04_PAYMENT_pass.pdf",
+    "requirement_code": "AICTE_PAYMENT_RECEIPT",
+    "expect": "Layer1 pass. Layer2 simulated verified with TXN-VERIFIED-001 if issuers on."
+  },
+  {
+    "file_txt": "05_PAYMENT_missing_txn.txt",
+    "file_pdf": "05_PAYMENT_missing_txn.pdf",
+    "requirement_code": "AICTE_PAYMENT_RECEIPT",
+    "expect": "Layer1 fail \u2014 missing transaction_id."
+  },
+  {
+    "file_txt": "06_OCCUPANCY_pass.txt",
+    "file_pdf": "06_OCCUPANCY_pass.pdf",
+    "requirement_code": "OCCUPANCY_CERTIFICATE",
+    "expect": "Layer1 pass. Layer2 simulated with BLD-VERIFIED-001 if issuers on."
+  },
+  {
+    "file_txt": "07_STRUCTURAL_pass.txt",
+    "file_pdf": "07_STRUCTURAL_pass.pdf",
+    "requirement_code": "STRUCTURAL_STABILITY",
+    "expect": "Layer1 pass. Layer2 engineer credential simulated with ENG-VERIFIED-001 if issuers on."
+  },
+  {
+    "file_txt": "08_AUDITED_balance_ok.txt",
+    "file_pdf": "08_AUDITED_balance_ok.pdf",
+    "requirement_code": "AUDITED_ACCOUNTS",
+    "expect": "Layer1 pass including arithmetic Assets = Liabilities + Equity."
+  },
+  {
+    "file_txt": "09_AUDITED_balance_fail.txt",
+    "file_pdf": "09_AUDITED_balance_fail.pdf",
+    "requirement_code": "AUDITED_ACCOUNTS",
+    "expect": "Layer1 arithmetic fail (100 != 10+10)."
+  },
+  {
+    "file_txt": "10_SATELLITE_coords.txt",
+    "file_pdf": "10_SATELLITE_coords.pdf",
+    "requirement_code": "SATELLITE_MAP",
+    "expect": "Layer1 presence checks. Geocode only if ENABLE_NOMINATIM_GEOCODE=true."
+  },
+  {
+    "file_txt": "11_AFFIDAVIT_2_pass.txt",
+    "file_pdf": "11_AFFIDAVIT_2_pass.pdf",
+    "requirement_code": "AFFIDAVIT_2",
+    "expect": "Layer1 pass. Layer2 estamp simulated with ESTAMP-VERIFIED-001 if issuers on."
+  },
+  {
+    "file_txt": "12_AFFIDAVIT_name_A.txt",
+    "file_pdf": "12_AFFIDAVIT_name_A.pdf",
+    "requirement_code": "AFFIDAVIT",
+    "expect": "Upload with 13 on same application \u2192 reconciliation fuzzy/mismatch demo."
+  },
+  {
+    "file_txt": "13_LAND_name_B_fuzzy.txt",
+    "file_pdf": "13_LAND_name_B_fuzzy.pdf",
+    "requirement_code": "LAND_OWNERSHIP",
+    "expect": "Pair with 12 \u2014 names similar for fuzzy match / review."
+  },
+  {
+    "file_txt": "14_LAND_name_mismatch.txt",
+    "file_pdf": "14_LAND_name_mismatch.pdf",
+    "requirement_code": "LAND_OWNERSHIP",
+    "expect": "Clear name mismatch vs Demo Institute of Technology."
+  }
+]

@@ -60,6 +60,23 @@ export interface Institution {
   type: string
 }
 
+export type ApplicationStage =
+  | 'draft'
+  | 'awaiting_scrutiny'
+  | 'under_scrutiny'
+  | 'awaiting_applicant'
+  | 'decided'
+
+export interface ApplicationMetrics {
+  total: number
+  inOfficerQueue: number
+  byStage: Record<ApplicationStage, number>
+  stageLabels: Record<ApplicationStage, string>
+  byStatus: Record<string, number>
+  requiresManualReview: number
+  openClarifications: number
+}
+
 export interface ApplicationSummary {
   id: string
   applicationNumber: string
@@ -71,7 +88,11 @@ export interface ApplicationSummary {
   status: ApplicationStatus
   priority: Priority
   deficiencyCount: number
+  /** Open issues, counted exactly as the scrutiny review counts them. */
   findingCount: number
+  /** Whose turn it is — the same model on every dashboard and list. */
+  stage?: ApplicationStage
+  stageLabel?: string
   requiresManualReview: boolean
   /** Prioritization aid only — not proof of fraud or an automatic rejection */
   priorityScore?: number
@@ -133,6 +154,7 @@ export interface DocumentItem {
   externalVerificationStatus?: string | null
   reviewStatus?: string | null
   latestVerificationRunId?: string | null
+  documentCheck?: DocumentCheck | null
 }
 
 export interface DocumentVerificationCheck {
@@ -425,6 +447,12 @@ export interface ApiHealth {
   database: string
   storageBackend: string
   demoAuth: boolean
+  appVersion?: string
+  maxUploadMb?: number | null
+  autoExtractOnUpload?: boolean | null
+  enableLiveVerification?: boolean | null
+  enableNominatimGeocode?: boolean | null
+  limitations?: string[]
 }
 
 export interface AdminUser {
@@ -493,12 +521,17 @@ export interface AdminSetting {
   updatedById?: string | null
   changeReason?: string
   updatedAt?: string | null
+  enforcement?: Record<string, string>
 }
 
 export interface AdminAuditEvent {
   id: string
   action: string
+  label?: string
+  category?: string
   actor: string
+  actorId?: string | null
+  applicationNumber?: string | null
   actorRole?: string
   timestamp: string
   detail: string
@@ -521,4 +554,443 @@ export interface AdminStats {
   categoryCount: number
   auditEvents24h: number
   liveVerificationEnabled: boolean
+  applications?: ApplicationMetrics
+}
+
+// ---- Applicant-facing view (no extracted fields / scores / forensics / technical codes) ----
+
+export type TypeMatchState = 'matched' | 'mismatch' | 'unclear' | 'not_checked'
+export type ClarityState = 'clear' | 'unclear' | 'unreadable' | 'not_checked'
+
+export interface DocumentCheck {
+  typeMatch: TypeMatchState
+  typeMatchMessage: string
+  expectedType: string
+  detectedType?: string | null
+  clarity: ClarityState
+  clarityMessage: string
+  languageNote?: string | null
+  needsAttention: boolean
+}
+
+export interface UploadPolicy {
+  maxUploadMb: number
+  maxUploadBytes: number
+  allowedExtensions: string[]
+  ocrAvailable: boolean
+  ocrLanguages: string[]
+  marathiSupported: boolean
+  ocrMessage: string
+}
+
+export type ApplicantUploadStatus = 'not_uploaded' | 'uploaded' | 'replaced' | 'needs_attention'
+
+export interface ApplicantDocumentVersion {
+  version: number
+  fileName: string
+  uploadedAt: string
+  sizeBytes: number
+}
+
+export interface ApplicantDocument {
+  id: string
+  fileName: string
+  version: number
+  uploadedAt: string
+  sizeBytes: number
+  documentCheck?: DocumentCheck | null
+  previousVersions: ApplicantDocumentVersion[]
+}
+
+export interface ApplicantRequirement {
+  code: string
+  name: string
+  mandatory: boolean
+  allowedTypes: string[]
+  uploadStatus: ApplicantUploadStatus
+  uploadStatusLabel: string
+  document?: ApplicantDocument | null
+}
+
+export interface ApplicantDeficiency {
+  id: string
+  title: string
+  description: string
+  status: 'open' | 'responded' | 'closed'
+  applicantResponse?: string | null
+  respondedAt?: string | null
+  createdAt: string
+  resolvedAt?: string | null
+}
+
+export interface ApplicantHistoryEntry {
+  id: string
+  timestamp: string
+  label: string
+  detail?: string | null
+}
+
+export interface ApplicantApplication {
+  id: string
+  applicationNumber: string
+  institutionName: string
+  category: string
+  categoryCode: string
+  programName: string
+  academicYear: string
+  status: ApplicationStatus
+  statusLabel: string
+  statusMessage: string
+  submittedAt?: string | null
+  requirements: ApplicantRequirement[]
+  deficiencies: ApplicantDeficiency[]
+  history: ApplicantHistoryEntry[]
+  canUpload: boolean
+  canResubmit: boolean
+  resubmitBlockers: string[]
+  requiredTotal: number
+  requiredUploaded: number
+}
+
+export interface ApplicantApplicationSummary {
+  id: string
+  applicationNumber: string
+  institutionName: string
+  category: string
+  programName: string
+  academicYear: string
+  status: ApplicationStatus
+  statusLabel: string
+  submittedAt?: string | null
+  openClarifications: number
+  requiredTotal: number
+  requiredUploaded: number
+}
+
+// ---- Scrutiny review (officer-facing; never sent to applicants) ----------------------
+
+export interface HandbookReference {
+  status: 'verified' | 'unverified'
+  edition?: string | null
+  section?: string | null
+  page?: string | null
+  title?: string | null
+  note: string
+}
+
+export type IssueSeverity = 'failed' | 'manual_review' | 'warning' | 'info'
+export type IssueStatus = 'open' | 'resolved' | 'waived' | 'accepted'
+
+export interface IssueEvidence {
+  text: string
+  documentId?: string | null
+  documentName?: string | null
+  pageReference?: string | null
+}
+
+export interface ScrutinyIssue {
+  key: string
+  title: string
+  explanation: string
+  severity: IssueSeverity
+  status: IssueStatus
+  source: string
+  layer: string
+  documentId?: string | null
+  documentName?: string | null
+  requirementCode?: string | null
+  relatedDocuments: Array<{ id: string; name: string }>
+  applicantAction?: string | null
+  handbook: HandbookReference
+  findingIds: string[]
+  checkIds: string[]
+  occurrences: number
+  evidence: IssueEvidence[]
+}
+
+export interface DocumentIssueGroup {
+  documentId?: string | null
+  documentName: string
+  requirementCode?: string | null
+  scope: 'document' | 'cross_document' | 'application'
+  issues: ScrutinyIssue[]
+  openCount: number
+  highestSeverity?: IssueSeverity | null
+}
+
+export interface DocumentCard {
+  id: string
+  name: string
+  requirementCode: string
+  fileName: string
+  version: number
+  mimeType: string
+  sizeBytes: number
+  uploadedAt: string
+  pageCount?: number | null
+  ruleValidationStatus?: string | null
+  externalVerificationStatus?: string | null
+  reviewStatus?: string | null
+  documentCheck?: DocumentCheck | null
+  openIssueCount: number
+  highestSeverity?: IssueSeverity | null
+  canPreview: boolean
+}
+
+export interface DecisionContext {
+  status: string
+  clarificationRequests: Array<{
+    id: string
+    title: string
+    description: string
+    status: string
+    applicantResponse?: string | null
+    createdAt: string
+    respondedAt?: string | null
+  }>
+  finalDecision?: 'recommended' | 'rejected' | null
+  finalDecisionReason?: string | null
+  finalDecisionBy?: string | null
+  finalDecisionAt?: string | null
+  mustCorrect: string[]
+  clarificationDraftTitle: string
+  clarificationDraftBody: string
+  rejectionDraftBody: string
+}
+
+export interface ScrutinyReview {
+  applicationId: string
+  applicationNumber: string
+  institutionName: string
+  status: string
+  generatedAt: string
+  validationRunId?: string | null
+  validationCompletedAt?: string | null
+  documents: DocumentCard[]
+  missingDocuments: Array<{ code: string; name: string; mandatory: boolean }>
+  issueGroups: DocumentIssueGroup[]
+  openIssueCount: number
+  resolvedIssueCount: number
+  historicalFindingCount: number
+  limitations: string[]
+  decision: DecisionContext
+  disclaimer: string
+}
+
+export type StageStatus =
+  | 'pass'
+  | 'warning'
+  | 'failed'
+  | 'manual_review'
+  | 'unavailable'
+  | 'not_run'
+
+export interface PipelineCheck {
+  id: string
+  title: string
+  outcome: string
+  severity: IssueSeverity
+  status: string
+  detail: string
+  source?: string | null
+  mode?: 'real' | 'simulated' | 'unavailable' | 'local' | null
+  limitations: string[]
+  resolutionReason?: string | null
+  resolvable: boolean
+  resolveKind?: 'finding' | 'check' | 'reconciliation' | 'forensics' | null
+  handbook?: HandbookReference | null
+}
+
+export interface PipelineStage {
+  key: 'intake' | 'classification' | 'layer1' | 'layer2' | 'layer3'
+  title: string
+  status: StageStatus
+  summary: string
+  details: Array<{ label: string; value: string }>
+  checks: PipelineCheck[]
+  limitations: string[]
+}
+
+export interface DocumentReport {
+  document: DocumentCard
+  stages: PipelineStage[]
+  issues: ScrutinyIssue[]
+  extractedFields: ExtractedField[]
+  versions: Array<{
+    version: number
+    fileName: string
+    uploadedAt: string
+    sizeBytes: number
+    sha256: string
+    isCurrent: boolean
+  }>
+  disclaimer: string
+}
+
+export interface HandbookReferenceAdmin {
+  id: string
+  referenceKey: string
+  edition: string
+  section: string
+  page: string
+  title: string
+  sourceNote: string
+  verified: boolean
+  verifiedBy?: string | null
+  verifiedAt?: string | null
+  updatedAt?: string | null
+}
+
+// ---- Administrator: integrations, system health, rule import/draft, audit facets ----
+
+export type IntegrationHealth =
+  | 'healthy'
+  | 'degraded'
+  | 'unavailable'
+  | 'not_configured'
+  | 'disabled'
+  | 'simulated'
+
+export interface IntegrationLastCheck {
+  checkedAt: string
+  ok: boolean | null
+  message: string
+}
+
+export interface Integration {
+  id: string
+  label: string
+  category: string
+  description: string
+  health: IntegrationHealth
+  mode: string
+  message: string
+  configured: boolean
+  deploymentEnabled: boolean
+  adminEnabled: boolean
+  effectiveEnabled: boolean
+  requiresCredentials: boolean
+  credentialsConfigured: boolean | null
+  details: Record<string, unknown>
+  limitations: string[]
+  canToggle: boolean
+  adminReason: string
+  adminChangedBy: string
+  adminChangedAt: string | null
+  lastCheck: IntegrationLastCheck | null
+}
+
+export interface IntegrationList {
+  items: Integration[]
+  summary: Record<string, number>
+}
+
+export interface HealthComponent {
+  id: string
+  label: string
+  category: string
+  health: IntegrationHealth
+  message: string
+  limitations: string[]
+}
+
+export interface SystemHealthActivity {
+  windowHours: number
+  applicationsByStatus: Record<string, number>
+  applicationsTotal: number
+  validationRuns: number
+  validationRunsFailed: number
+  extractionRuns: number
+  extractionRunsFailed: number
+  extractionRunsNeedingAttention: number
+  verificationChecksUnavailable: number | null
+  lastAuditEventAt: string | null
+  lastValidationAt: string | null
+  auditEvents: number
+}
+
+export interface SystemHealth {
+  status: 'ok' | 'degraded' | 'unavailable'
+  checkedAt: string
+  environment: string
+  version: string
+  components: HealthComponent[]
+  integrations: HealthComponent[]
+  integrationSummary: Record<string, number>
+  activity: SystemHealthActivity
+  warnings: string[]
+}
+
+export interface RuleImportItemResult {
+  index: number
+  code: string
+  name?: string
+  action: 'create_rule_draft' | 'add_draft_version' | 'invalid'
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+  version: string
+}
+
+export interface RuleImportValidation {
+  valid: boolean
+  fileErrors: string[]
+  results: RuleImportItemResult[]
+  willCreate: number
+  note: string
+}
+
+export interface RuleImportResult {
+  created: Array<{ code: string; version: string; action: string; ruleId: string; activated: boolean }>
+  activated: number
+  message: string
+}
+
+export interface RuleDraftProposal {
+  requiresReview: boolean
+  executable: boolean
+  confidence: 'high' | 'low'
+  mode: 'new_version_of_existing_rule' | 'new_rule'
+  interpretation: string[]
+  warnings: string[]
+  sourceText: string
+  draft: {
+    code: string
+    name: string
+    description: string
+    version: string
+    isSynthetic: boolean
+    handbookRef: string
+    verifiedSourceRef: string
+    definition: Record<string, unknown>
+    changeReason: string
+    targetRuleCode: string | null
+  }
+  validation: { valid: boolean; errors: string[]; warnings: string[] }
+}
+
+export interface RuleUsage {
+  ruleCode: string
+  currentVersion: string
+  findingsByVersion: Record<string, number>
+  note: string
+}
+
+export interface FacetValue {
+  value: string
+  count: number
+}
+
+export interface AuditFacets {
+  categories: FacetValue[]
+  actions: FacetValue[]
+  actorRoles: FacetValue[]
+  entityTypes: FacetValue[]
+  total: number
+  firstEventAt: string | null
+  lastEventAt: string | null
+}
+
+export interface AdminAuditDetail extends AdminAuditEvent {
+  related: AdminAuditEvent[]
 }

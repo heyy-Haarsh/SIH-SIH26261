@@ -30,6 +30,11 @@ class Application(Base, TimestampMixin):
         ForeignKey("users.id"), index=True, nullable=True
     )
 
+    # Name of the institution as entered by the applicant on this application. Kept per
+    # application (the institution record is shared by every applicant of that institution).
+    institution_name: Mapped[str] = mapped_column(
+        String(255), default="", server_default="", nullable=False
+    )
     program_name: Mapped[str] = mapped_column(String(255), nullable=False)
     academic_year: Mapped[str] = mapped_column(String(16), nullable=False)
     contact_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)

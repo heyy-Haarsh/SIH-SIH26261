@@ -11,7 +11,7 @@ import re
 import zipfile
 from typing import Optional
 
-from app.core.config import settings
+from app.core import runtime_config
 from app.document_processing.interfaces import IntakeModule
 from app.document_processing.types import (
     FileCheck,
@@ -90,8 +90,9 @@ class LocalIntakeModule(IntakeModule):
     name = "intake"
 
     def __init__(self, allowed_extensions: Optional[frozenset[str]] = None, max_bytes: Optional[int] = None):
-        self.allowed = allowed_extensions if allowed_extensions is not None else settings.allowed_extension_set
-        self.max_bytes = max_bytes if max_bytes is not None else settings.max_upload_bytes
+        # Administrator policy may only tighten the deployment limits (see core.runtime_config).
+        self.allowed = allowed_extensions if allowed_extensions is not None else runtime_config.allowed_extensions()
+        self.max_bytes = max_bytes if max_bytes is not None else runtime_config.max_upload_bytes()
 
     def capability(self) -> ModuleResult:
         return ModuleResult(

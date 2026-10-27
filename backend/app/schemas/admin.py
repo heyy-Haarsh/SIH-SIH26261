@@ -180,3 +180,20 @@ class AdminStatsOut(CamelModel):
     category_count: int
     audit_events_24h: int
     live_verification_enabled: bool
+    applications: dict | None = None
+
+
+class IntegrationToggleIn(BaseModel):
+    enabled: bool
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class RuleImportIn(BaseModel):
+    """Either raw `json_text` (validated server-side, with line/column on syntax errors) or parsed `rules`."""
+
+    json_text: str | None = Field(default=None, max_length=500_000)
+    rules: list[Any] | None = None
+
+
+class RuleDraftIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)

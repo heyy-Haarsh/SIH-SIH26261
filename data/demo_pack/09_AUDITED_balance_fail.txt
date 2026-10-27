@@ -1,0 +1,9 @@
+Audited Statement of Accounts
+
+Financial Year: 2024-25
+Auditor Name: A CA
+Issue Date: 2025-01-10
+Institution Name: Demo Institute of Technology
+Total Assets: 100
+Total Liabilities: 10
+Total Equity: 10

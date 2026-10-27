@@ -1,0 +1,9 @@
+{
+  "ESTAMP-VERIFIED-001": {"status": "verified"},
+  "ESTAMP-MISMATCH-001": {"status": "mismatch_detected", "mismatched_fields": ["institution_name"]},
+  "ESTAMP-EXPIRED-001": {"status": "expired"},
+  "ESTAMP-PENDING-001": {"status": "verification_pending"},
+  "ESTAMP-UNAVAIL-001": {"status": "source_unavailable"},
+  "ESTAMP-MANUAL-001": {"status": "manual_review_required"},
+  "_default": {"status": "verification_pending"}
+}

@@ -191,6 +191,11 @@ class ExtractionOrchestrator:
 
         t0 = time.perf_counter()
         field_cands = self.fields.extract_from_pages(pages, file_name=file_name)
+
+        # LLM fallback — never pass/fail; only fill missing fields when enabled
+        field_cands = self._maybe_llm_fill(
+            field_cands, pages=pages, selected_requirement_code=selected_requirement_code
+        )
         field_cands = self.evidence.map_fields(field_cands, pages)
         field_cands = self._merge_conflicts(field_cands)
         timings["fields"] = int((time.perf_counter() - t0) * 1000)
@@ -276,6 +281,64 @@ class ExtractionOrchestrator:
             status = ExtractionRunStatus.REQUIRES_OCR
 
         return pages, pages_ocr, status, warnings, timings
+
+    def _maybe_llm_fill(
+        self,
+        fields: list[FieldCandidate],
+        *,
+        pages: list[PageText],
+        selected_requirement_code: str | None,
+    ) -> list[FieldCandidate]:
+        settings = get_settings()
+        if not settings.enable_ai_extraction:
+            return fields
+        provider = (settings.llm_provider or "none").strip().lower()
+        if provider in ("", "none", "null", "off"):
+            return fields
+        from app.document_processing.llm_extractor import get_llm_extractor
+        from app.document_processing.normalize_text import compute_normalized_value
+        from app.verification_engine.loader import get_config_for_requirement
+
+        present = {f.field_name for f in fields if (f.raw_value or "").strip()}
+        required: list[str] = []
+        if selected_requirement_code:
+            cfg = get_config_for_requirement(selected_requirement_code)
+            if cfg:
+                for item in (cfg.get("layer1") or {}).get("required_fields") or []:
+                    if isinstance(item, dict):
+                        fname = str(item.get("field") or "").strip()
+                    else:
+                        fname = str(item).strip()
+                    if fname:
+                        required.append(fname)
+        missing = [r for r in required if r not in present]
+        if required and not missing:
+            return fields
+        schema_keys = missing or required or ["institution_name", "certificate_number"]
+        schema = {"properties": {k: {"type": "string"} for k in schema_keys}}
+        text_blob = "\n".join(p.text for p in pages if p.text)
+        if not text_blob.strip():
+            return fields
+        extractor = get_llm_extractor()
+        extracted = extractor.extract(text_blob, schema)
+        out = list(fields)
+        for key, val in extracted.items():
+            if not isinstance(val, str) or not val.strip():
+                continue
+            if key in present:
+                continue
+            out.append(
+                FieldCandidate(
+                    field_name=str(key),
+                    raw_value=val.strip(),
+                    normalized_value=compute_normalized_value(val.strip()),
+                    method=ExtractionMethod.AI_MODEL,
+                    confidence=None,
+                    raw_snippet=val.strip()[:240],
+                    source="llm",
+                )
+            )
+        return out
 
     def _merge_conflicts(self, fields: list[FieldCandidate]) -> list[FieldCandidate]:
         grouped: dict[str, list[FieldCandidate]] = defaultdict(list)
@@ -392,14 +455,14 @@ def persist_extraction_run(
                 for s in siblings
             ]
 
-        display = cand.normalized_value if cand.normalized_value is not None else cand.raw_value
+        # D-20: persist raw exactly; normalized_value is a separate column — never overwrite.
         db.add(
             ExtractedField(
                 document_version_id=document_version.id,
                 application_id=application_id,
                 extraction_run_id=run.id,
                 field_name=cand.field_name,
-                value=display,
+                value=cand.raw_value,
                 raw_value=cand.raw_value,
                 normalized_value=cand.normalized_value,
                 confidence=cand.confidence,

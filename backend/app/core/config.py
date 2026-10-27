@@ -56,7 +56,8 @@ class Settings(BaseSettings):
     # AI / external verification (none are implemented as live integrations)
     # ENABLE_AI_EXTRACTION only gates optional LLM-based extraction — never local PDF/OCR/deterministic fields.
     llm_api_key: str = ""
-    llm_provider: str = ""
+    llm_provider: str = "none"  # gemini | openai | none
+    llm_model: str = ""
     enable_ai_extraction: bool = False
     aicte_api_base_url: str = ""
     aicte_api_key: str = ""
@@ -66,11 +67,29 @@ class Settings(BaseSettings):
     enable_nominatim_geocode: bool = False
     nominatim_user_agent: str = "PRAMAN-SIH26261/0.1 (local-dev; contact=admin@praman.local)"
     geocode_mismatch_meters: float = 5000.0
+    nominatim_base_url: str = "https://nominatim.openstreetmap.org"
+
+    # PDF PKI trust store (Phase 4) — empty by default; never ship CCA certs
+    trust_store_dir: str = ""
+
+    # Simulated issuer service (Phase 2)
+    simulated_issuers_url: str = "http://127.0.0.1:8001"
+    simulated_issuers_port: int = 8001
+    # When false, Layer-2 authorized adapters use local stubs (no HTTP). Enable for real HTTP issuers.
+    use_simulated_http_issuers: bool = False
+    fire_issuer_base_url: str = ""
+    building_issuer_base_url: str = ""
+    structural_issuer_base_url: str = ""
+    aicte_payment_issuer_base_url: str = ""
+    icai_issuer_base_url: str = ""
+    estamp_issuer_base_url: str = ""
 
     # Document intelligence (local; no cloud required)
     enable_local_pdf_extraction: bool = True
     enable_local_ocr: bool = True
-    ocr_languages: str = "eng"  # comma-separated Tesseract langs; hi/mr can be added later
+    # Tesseract langs, "eng+hin+mar" or "eng,hin,mar". Marathi (mar) / Hindi (hin) need the
+    # matching tessdata installed; missing packs degrade (English-only OCR) with a stated limitation.
+    ocr_languages: str = "eng+hin+mar"
     ocr_dpi: int = 200
     max_extraction_pages: int = 50
     extraction_timeout_seconds: int = 120
@@ -78,6 +97,12 @@ class Settings(BaseSettings):
     auto_extract_on_upload: bool = True
 
     # ---- derived helpers -------------------------------------------------
+    @property
+    def ocr_language_list(self) -> list[str]:
+        raw = (self.ocr_languages or "").replace("+", ",")
+        langs = [x.strip() for x in raw.split(",") if x.strip()]
+        return langs or ["eng"]
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

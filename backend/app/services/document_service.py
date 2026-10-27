@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core import runtime_config
 from app.core.config import get_settings
 from app.core.seed import DEFAULT_DOCS
 from app.core.security import ensure_application_access
@@ -12,13 +13,36 @@ from app.document_processing.intake import LocalIntakeModule
 from app.document_processing.orchestrator import run_extraction_for_version
 from app.models.application import Application
 from app.models.document import Document, DocumentVersion
-from app.models.enums import DocumentStatus, UserRole, ValidationOutcome
+from app.models.enums import ApplicationStatus, DocumentStatus, ExtractionRunStatus, UserRole, ValidationOutcome
 from app.models.user import User
 from app.models.validation import Finding
 from app.schemas.common import UploadResultOut
 from app.services.audit_service import record_audit
 from app.services.serializers import finding_to_out
 from app.services.validation_service import run_validation
+
+_CHUNK = 1024 * 1024
+
+
+def _read_upload_capped(file: UploadFile, max_bytes: int) -> bytes:
+    """Read upload in chunks; reject before buffering an oversized body fully."""
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "code": "file_too_large",
+                    "message": f"File exceeds the {max_bytes / (1024 * 1024):g} MB size limit.",
+                },
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def upload_document(
@@ -38,12 +62,25 @@ def upload_document(
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     ensure_application_access(user, app)
+    if app.status in (
+        ApplicationStatus.RECOMMENDED,
+        ApplicationStatus.REJECTED,
+        ApplicationStatus.APPROVED,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "application_closed",
+                "message": "This application has a final decision; documents can no longer be changed.",
+            },
+        )
 
     known = {r["code"] for r in DEFAULT_DOCS}
     if requirement_code not in known:
         raise HTTPException(status_code=400, detail=f"Unknown requirement_code: {requirement_code}")
 
-    content = file.file.read()
+    settings = get_settings()
+    content = _read_upload_capped(file, runtime_config.max_upload_bytes())
     intake = LocalIntakeModule()
     result = intake.inspect(
         file_name=file.filename,
@@ -78,7 +115,6 @@ def upload_document(
         "checks": [{"name": c.name, "passed": c.passed, "detail": c.detail} for c in result.checks],
     }
 
-    settings = get_settings()
     settings.upload_path.mkdir(parents=True, exist_ok=True)
 
     doc = (
@@ -104,13 +140,21 @@ def upload_document(
     else:
         version_no = doc.current_version + 1
         doc.current_version = version_no
-        doc.status = DocumentStatus.REPLACED
+        # Prior versions remain on disk/DB; current logical document is uploaded again.
+        doc.status = DocumentStatus.UPLOADED
 
     safe_name = result.file_name or Path(file.filename or "upload.bin").name
+    # Never trust client path segments (already sanitized); keep flat storage names.
     storage_name = (
         f"{application_id}_{requirement_code}_v{version_no}_{result.sha256[:12]}_{safe_name}"
     )
     storage_path = settings.upload_path / storage_name
+    # Refuse path escape if somehow present
+    if ".." in storage_name or "/" in storage_name or "\\" in storage_name:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_file_name", "message": "Unsafe storage file name rejected."},
+        )
     storage_path.write_bytes(content)
 
     version = DocumentVersion(
@@ -147,32 +191,59 @@ def upload_document(
     extraction_run_id = None
     extraction_status = None
     validation_run_id = None
-    findings_out = []
+    pipeline_warnings: list[str] = []
 
-    # Reload version after commit
     version = db.query(DocumentVersion).filter(DocumentVersion.id == version.id).one()
     doc = db.query(Document).filter(Document.id == doc.id).one()
 
-    if settings.auto_extract_on_upload:
-        ext_run = run_extraction_for_version(
-            db,
-            version,
-            application_id=application_id,
-            selected_requirement_code=requirement_code,
-            triggered_by_id=user.id,
-            force=False,
-        )
-        db.commit()
-        extraction_run_id = ext_run.id
-        extraction_status = (
-            ext_run.status.value if hasattr(ext_run.status, "value") else str(ext_run.status)
-        )
+    if runtime_config.auto_extract_on_upload():
+        try:
+            ext_run = run_extraction_for_version(
+                db,
+                version,
+                application_id=application_id,
+                selected_requirement_code=requirement_code,
+                triggered_by_id=user.id,
+                force=False,
+            )
+            db.commit()
+            extraction_run_id = ext_run.id
+            extraction_status = (
+                ext_run.status.value if hasattr(ext_run.status, "value") else str(ext_run.status)
+            )
+            failed_like = {
+                ExtractionRunStatus.FAILED.value,
+                ExtractionRunStatus.UNSUPPORTED.value,
+                ExtractionRunStatus.OCR_UNAVAILABLE.value,
+                ExtractionRunStatus.REQUIRES_OCR.value,
+                ExtractionRunStatus.REQUIRES_MANUAL_REVIEW.value,
+            }
+            if extraction_status in failed_like or extraction_status.endswith("failed"):
+                pipeline_warnings.append(
+                    f"Extraction finished with status '{extraction_status}' — file accepted, "
+                    "but text/fields may be incomplete. Not treated as authenticity success."
+                )
+        except Exception as exc:  # noqa: BLE001 — never hide upload if extraction crashes
+            db.rollback()
+            pipeline_warnings.append(
+                f"Extraction failed after upload: {exc.__class__.__name__}. "
+                "Document version is preserved; re-run extraction from the application page."
+            )
+            extraction_status = "failed"
 
     app = db.query(Application).filter(Application.id == application_id).first()
-    val_run = run_validation(db, app, triggered_by=user.id, actor_name=user.name)
-    validation_run_id = val_run.id
+    try:
+        val_run = run_validation(db, app, triggered_by=user.id, actor_name=user.name)
+        validation_run_id = val_run.id
+        if (val_run.status.value if hasattr(val_run.status, "value") else str(val_run.status)) == "failed":
+            pipeline_warnings.append("Validation run reported failed status.")
+    except Exception as exc:  # noqa: BLE001
+        pipeline_warnings.append(
+            f"Validation pipeline error after upload: {exc.__class__.__name__}. "
+            "Do not treat the application as compliant."
+        )
 
-    if extraction_run_id:
+    if extraction_run_id and validation_run_id:
         from app.models.extraction import ExtractionRun
 
         ext = db.query(ExtractionRun).filter(ExtractionRun.id == extraction_run_id).first()
@@ -181,16 +252,38 @@ def upload_document(
             db.add(ext)
             db.commit()
 
-    findings_db = db.query(Finding).filter(Finding.validation_run_id == val_run.id).all()
-    for f in findings_db:
-        _ = f.evidence
-    findings_out = [finding_to_out(f) for f in findings_db]
+    findings_out = []
+    if validation_run_id:
+        findings_db = db.query(Finding).filter(Finding.validation_run_id == validation_run_id).all()
+        for f in findings_db:
+            _ = f.evidence
+        findings_out = [finding_to_out(f) for f in findings_db]
+
+    pipeline_ok = len(pipeline_warnings) == 0 and checks.get("ok") is True
+
+    from app.models.extraction import ExtractionRun
+    from app.services.document_check_service import build_document_check
+
+    latest_run = (
+        db.query(ExtractionRun)
+        .filter(ExtractionRun.document_version_id == version.id)
+        .order_by(ExtractionRun.created_at.desc())
+        .first()
+    )
+    document_check = build_document_check(
+        requirement_name=req_name, run=latest_run, file_checks=checks
+    )
 
     return UploadResultOut(
+        document_check=document_check,
+        document_version=version_no,
+        replaced_previous=version_no > 1,
         document_id=doc.id,
         validation_run_id=validation_run_id,
         extraction_run_id=extraction_run_id,
         extraction_status=extraction_status,
         findings=findings_out,
         file_checks=checks,
+        pipeline_ok=pipeline_ok,
+        pipeline_warnings=pipeline_warnings,
     )

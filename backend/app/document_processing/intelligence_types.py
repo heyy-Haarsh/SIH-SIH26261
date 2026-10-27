@@ -70,6 +70,8 @@ class FieldCandidate:
     page_reference: Optional[str] = None
     bbox: Optional[BBox] = None
     unit: Optional[str] = None
+    raw_snippet: Optional[str] = None
+    source: Optional[str] = None  # text_layer | ocr | llm | filename_metadata
 
 
 @dataclass

@@ -1,0 +1,6 @@
+AICTE Payment Receipt
+
+Receipt Number: RCP-BAD-1
+Payment Amount: 1000
+Payment Date: 2024-06-01
+Institution Name: Demo Institute of Technology

@@ -1,30 +1,37 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
-import { DemoBanner } from '@/components/dashboard/DemoBanner'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { ApplicationTable } from '@/components/applications/ApplicationTable'
+import { ApplicantApplicationTable } from '@/components/applicant/ApplicantApplicationTable'
 import { api, ApiError } from '@/services/api'
 import { useRole } from '@/app/RoleContext'
-import type { ApplicationSummary } from '@/types'
+import type { ApplicantApplicationSummary } from '@/types'
 
 export function ApplicantApplicationsPage() {
   const { role } = useRole()
-  const [apps, setApps] = useState<ApplicationSummary[]>([])
+  const [apps, setApps] = useState<ApplicantApplicationSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (role !== 'applicant') {
+      setLoading(false)
+      setError('Switch to the Applicant role to see your applications.')
+      return
+    }
     setLoading(true)
     api
-      .listApplications(role)
-      .then(setApps)
+      .listMyApplications(role)
+      .then((list) => {
+        setApps(list)
+        setError(null)
+      })
       .catch((err) => {
         setError(
           err instanceof ApiError
             ? `Could not load applications (${err.status}): ${err.message}`
-            : 'Backend unreachable — start the API on port 8000.',
+            : 'Cannot reach the server. Please try again shortly.',
         )
       })
       .finally(() => setLoading(false))
@@ -32,12 +39,9 @@ export function ApplicantApplicationsPage() {
 
   return (
     <AppShell title="My Applications" breadcrumbs={['Applicant', 'Applications']}>
-      <DemoBanner>
-        Live applications from the API for the demo applicant user. Switch role to Applicant.
-      </DemoBanner>
       <Card>
         <CardHeader
-          title="Institution applications"
+          title="Applications"
           description={loading ? 'Loading…' : `${apps.length} application(s)`}
           action={
             <Link to="/applicant/applications/new">
@@ -50,16 +54,17 @@ export function ApplicantApplicationsPage() {
             {error}
           </div>
         )}
-        {!loading && !error && apps.length === 0 && (
+        {!loading && !error && apps.length === 0 ? (
           <p className="mb-4 text-sm text-ink-muted">
             No applications yet.{' '}
             <Link className="underline" to="/applicant/applications/new">
               Create one
             </Link>
-            , then upload documents.
+            , then upload your documents.
           </p>
+        ) : (
+          <ApplicantApplicationTable rows={apps} />
         )}
-        <ApplicationTable rows={apps} detailBasePath="/applicant/applications" />
       </Card>
     </AppShell>
   )

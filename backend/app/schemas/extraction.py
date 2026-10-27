@@ -75,3 +75,5 @@ class OcrCapabilityOut(CamelModel):
     languages_requested: list[str] = Field(default_factory=list)
     languages_available: list[str] = Field(default_factory=list)
     languages_missing: list[str] = Field(default_factory=list)
+    languages_usable: list[str] = Field(default_factory=list)
+    marathi_supported: bool = False

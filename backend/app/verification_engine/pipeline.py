@@ -468,6 +468,29 @@ def run_for_document(
         entity_id=run.id,
     )
 
+    try:
+        from app.services.audit_chain_service import record_chain_event
+
+        record_chain_event(
+            db,
+            action="doc_verification.completed",
+            actor_id=triggered_by.id if triggered_by else "",
+            actor_role=triggered_by.role.value if triggered_by else "system",
+            application_id=document.application_id,
+            entity_type="document_verification_run",
+            entity_id=run.id,
+            rule_version=run.config_version,
+            mode="SIMULATED",
+            result_summary={
+                "requirement": document.requirement_code,
+                "L1": rule_status.value,
+                "L2": ext_status.value,
+                "L3": review_status.value,
+            },
+        )
+    except Exception:  # noqa: BLE001 — never break pipeline for audit chain
+        pass
+
     if commit:
         db.commit()
         db.refresh(run)

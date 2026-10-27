@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.models.enums import UserRole
 from app.models.user import User
 from app.services import doc_verification_service as svc
@@ -19,7 +19,7 @@ class ResolveCheckIn(BaseModel):
 
 
 @router.get("/document-verification/configs")
-def get_configs(user: User = Depends(get_current_user)):
+def get_configs(user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN))):
     _ = user
     return svc.list_engine_configs()
 
@@ -28,7 +28,7 @@ def get_configs(user: User = Depends(get_current_user)):
 def run_app_verification(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN, UserRole.APPLICANT)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     runs = svc.run_application_pipeline(db, user, application_id)
     return [svc.run_to_dict(r) for r in runs]
@@ -38,7 +38,7 @@ def run_app_verification(
 def list_app_verification(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     runs = svc.list_runs_for_application(db, user, application_id)
     return [svc.run_to_dict(r) for r in runs]
@@ -48,7 +48,7 @@ def list_app_verification(
 def run_doc_verification(
     document_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN, UserRole.APPLICANT)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     run = svc.run_document_pipeline(db, user, document_id)
     return svc.run_to_dict(run)
@@ -58,7 +58,7 @@ def run_doc_verification(
 def get_run(
     run_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     return svc.run_to_dict(svc.get_run(db, user, run_id))
 
@@ -68,7 +68,7 @@ def resolve_check(
     check_id: str,
     body: ResolveCheckIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     check = svc.resolve_check(db, user, check_id, status=body.status, reason=body.reason)
     return svc.check_to_dict(check)

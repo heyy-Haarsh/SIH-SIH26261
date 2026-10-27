@@ -8,6 +8,7 @@ def test_create_upload_validate_flow(client):
         headers=auth_headers("applicant"),
         json={
             "category_code": "NEW-ENG",
+            "institution_name": "Test Institute of Technology",
             "program_name": "B.Tech — Demo Program",
             "academic_year": "2025-26",
         },
@@ -51,6 +52,7 @@ def test_reject_disallowed_extension(client):
         headers=auth_headers("applicant"),
         json={
             "category_code": "EOA",
+            "institution_name": "Test Institute of Technology",
             "program_name": "Demo",
             "academic_year": "2025-26",
         },

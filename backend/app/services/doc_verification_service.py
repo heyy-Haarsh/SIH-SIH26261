@@ -186,6 +186,9 @@ def check_to_dict(c: DocumentVerificationCheck) -> dict:
 
 
 def run_to_dict(r: DocumentVerificationRun) -> dict:
+    from app.services.serializers import to_document_result_out
+
+    engine_dto = to_document_result_out(r)
     return {
         "id": r.id,
         "applicationId": r.application_id,
@@ -208,4 +211,5 @@ def run_to_dict(r: DocumentVerificationRun) -> dict:
         "createdAt": r.created_at,
         "completedAt": r.completed_at,
         "checks": [check_to_dict(c) for c in (r.checks or [])],
+        "engineResult": engine_dto.model_dump(mode="json"),
     }

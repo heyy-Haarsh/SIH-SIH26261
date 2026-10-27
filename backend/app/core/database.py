@@ -100,6 +100,32 @@ def init_db() -> None:
     import app.models  # noqa: F401  (register all models on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    ensure_additive_columns()
+
+
+# Columns added after the first release. ``create_all`` never alters existing tables, so demo
+# databases created by an older build are upgraded in place (additive, idempotent). Alembic
+# remains the production migration path (see alembic/versions).
+_ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("applications", "institution_name", "VARCHAR(255) NOT NULL DEFAULT ''"),
+    ("findings", "fingerprint", "VARCHAR(64) NOT NULL DEFAULT ''"),
+)
+
+
+def ensure_additive_columns(bind: Engine | None = None) -> None:
+    from sqlalchemy import inspect
+
+    target = bind or engine
+    insp = inspect(target)
+    for table, column, ddl in _ADDITIVE_COLUMNS:
+        if table not in insp.get_table_names():
+            continue
+        existing = {c["name"] for c in insp.get_columns(table)}
+        if column in existing:
+            continue
+        with target.begin() as conn:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+        logger.info("Added missing column %s.%s", table, column)
 
 
 def database_status() -> str:

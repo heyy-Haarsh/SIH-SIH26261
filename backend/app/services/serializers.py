@@ -30,7 +30,9 @@ from app.schemas.common import (
     VerificationOut,
 )
 from app.core.seed import DEFAULT_DOCS
-from app.services import forensics_service, reconciliation_service
+from app.services import findings_service, forensics_service, reconciliation_service
+from app.services.document_check_service import build_document_check
+from app.services.status_model import STAGE_LABELS, stage_of
 
 
 def _enum_val(v) -> str:
@@ -179,6 +181,13 @@ def deficiency_to_out(n: DeficiencyNotice, application_number: str | None = None
     )
 
 
+def _open_issue_count(db: Session, app: Application) -> int:
+    # Imported lazily: the review service itself imports serializers.
+    from app.services.scrutiny_view_service import open_issue_count
+
+    return open_issue_count(db, app)
+
+
 def application_summary(db: Session, app: Application) -> ApplicationSummaryOut:
     deficiency_count = (
         db.query(DeficiencyNotice)
@@ -193,14 +202,16 @@ def application_summary(db: Session, app: Application) -> ApplicationSummaryOut:
         id=app.id,
         application_number=app.application_number,
         institution_id=app.institution_id,
-        institution_name=app.institution.name if app.institution else "",
+        institution_name=(app.institution_name or (app.institution.name if app.institution else "")),
         category=app.category.name if app.category else "",
         category_code=app.category.code if app.category else "",
         submitted_at=app.submitted_at,
         status=_enum_val(app.status),
         priority=_enum_val(app.priority),
         deficiency_count=deficiency_count,
-        finding_count=app.finding_count,
+        finding_count=_open_issue_count(db, app),
+        stage=stage_of(app.status),
+        stage_label=STAGE_LABELS[stage_of(app.status)],
         requires_manual_review=app.requires_manual_review,
         priority_score=app.priority_score,
         score_config_version=app.score_config_version,
@@ -217,6 +228,7 @@ def document_to_out(doc: Document, db: Session | None = None) -> DocumentOut:
     selected = doc.requirement_code
     mismatch = False
     run_id = None
+    check = None
     if version is not None:
         outcome = _enum_val(version.validation_outcome)
         if db is not None:
@@ -235,6 +247,9 @@ def document_to_out(doc: Document, db: Session | None = None) -> DocumentOut:
                 selected = run.selected_category or doc.requirement_code
                 mismatch = bool(run.category_mismatch)
                 run_id = run.id
+            check = build_document_check(
+                requirement_name=doc.name, run=run, file_checks=version.file_checks
+            )
     return DocumentOut(
         id=doc.id,
         name=doc.name,
@@ -262,7 +277,58 @@ def document_to_out(doc: Document, db: Session | None = None) -> DocumentOut:
         if getattr(doc, "review_status", None) is not None
         else "pending",
         latest_verification_run_id=getattr(doc, "latest_verification_run_id", None),
+        document_check=check,
     )
+
+
+def extracted_field_to_out(ef, doc: Document, file_name: str) -> ExtractedFieldOut:
+    bbox = None
+    if ef.bbox_x0 is not None and ef.bbox_y0 is not None:
+        bbox = {
+            "x0": ef.bbox_x0,
+            "y0": ef.bbox_y0,
+            "x1": ef.bbox_x1 or ef.bbox_x0,
+            "y1": ef.bbox_y1 or ef.bbox_y0,
+        }
+    return ExtractedFieldOut(
+        id=ef.id,
+        field_name=ef.field_name,
+        value=ef.corrected_value or ef.value,
+        raw_value=ef.raw_value or ef.value,
+        normalized_value=ef.normalized_value,
+        confidence=ef.confidence,
+        ocr_confidence=ef.ocr_confidence,
+        page_number=ef.page_number,
+        page_reference=ef.page_reference,
+        bbox=bbox,
+        coordinate_space=ef.coordinate_space,
+        method=_enum_val(ef.method) if ef.method else None,
+        review_status=_enum_val(ef.review_status) if ef.review_status else None,
+        is_conflict=bool(ef.is_conflict),
+        candidate_values=list(ef.candidate_values or []),
+        unit=ef.unit,
+        source_document_id=doc.id,
+        source_document_name=file_name,
+        extraction_run_id=ef.extraction_run_id,
+        corrected_value=ef.corrected_value,
+    )
+
+
+def current_extracted_fields(doc: Document) -> list[ExtractedFieldOut]:
+    """Fields of the document's *current* version and its latest extraction run only.
+
+    Superseded versions and older extraction runs are history; showing them next to the current
+    values is what made replaced documents look like they still had the old data.
+    """
+    version = doc.latest_version
+    if version is None:
+        return []
+    fields = list(version.extracted_fields)
+    run_ids = [(f.extraction_run_id, f.created_at) for f in fields if f.extraction_run_id]
+    if run_ids:
+        latest_run = max(run_ids, key=lambda t: t[1])[0]
+        fields = [f for f in fields if f.extraction_run_id in (latest_run, None)]
+    return [extracted_field_to_out(f, doc, version.file_name) for f in fields]
 
 
 def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
@@ -282,47 +348,11 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
 
     extracted: list[ExtractedFieldOut] = []
     for doc in app.documents:
-        for version in doc.versions:
-            for ef in version.extracted_fields:
-                bbox = None
-                if ef.bbox_x0 is not None and ef.bbox_y0 is not None:
-                    bbox = {
-                        "x0": ef.bbox_x0,
-                        "y0": ef.bbox_y0,
-                        "x1": ef.bbox_x1 or ef.bbox_x0,
-                        "y1": ef.bbox_y1 or ef.bbox_y0,
-                    }
-                extracted.append(
-                    ExtractedFieldOut(
-                        id=ef.id,
-                        field_name=ef.field_name,
-                        value=ef.corrected_value or ef.value,
-                        raw_value=ef.raw_value or ef.value,
-                        normalized_value=ef.normalized_value,
-                        confidence=ef.confidence,
-                        ocr_confidence=ef.ocr_confidence,
-                        page_number=ef.page_number,
-                        page_reference=ef.page_reference,
-                        bbox=bbox,
-                        coordinate_space=ef.coordinate_space,
-                        method=_enum_val(ef.method) if ef.method else None,
-                        review_status=_enum_val(ef.review_status) if ef.review_status else None,
-                        is_conflict=bool(ef.is_conflict),
-                        candidate_values=list(ef.candidate_values or []),
-                        unit=ef.unit,
-                        source_document_id=doc.id,
-                        source_document_name=version.file_name,
-                        extraction_run_id=ef.extraction_run_id,
-                        corrected_value=ef.corrected_value,
-                    )
-                )
+        extracted.extend(current_extracted_fields(doc))
 
-    findings = (
-        db.query(Finding)
-        .filter(Finding.application_id == app.id)
-        .order_by(Finding.created_at.desc())
-        .all()
-    )
+    # Only the latest completed run's findings are "current"; earlier runs stay in the database
+    # as history and are never shown next to (or counted with) the current result.
+    findings = list(reversed(findings_service.current_findings(db, app.id)))
     for f in findings:
         _ = f.evidence
 
@@ -336,7 +366,14 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
     )
 
     verifications = (
-        db.query(VerificationRequest).filter(VerificationRequest.application_id == app.id).all()
+        db.query(VerificationRequest)
+        .filter(
+            VerificationRequest.application_id == app.id,
+            VerificationRequest.validation_run_id == (latest_run.id if latest_run else None),
+        )
+        .all()
+        if latest_run
+        else []
     )
     reviews = db.query(ReviewDecision).filter(ReviewDecision.application_id == app.id).all()
     audits = (
@@ -443,3 +480,170 @@ def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
 
 def count_failed_findings(findings: list[Finding]) -> int:
     return sum(1 for f in findings if f.severity == FindingSeverity.FAILED)
+
+
+# --- Phase 1 engine DTOs (app.schemas.engine) ---------------------------------
+
+_LAYER2_TO_ENGINE_STATUS = {
+    "verified_by_source": "verified",
+    "verified": "verified",
+    "mismatch_detected": "mismatch_detected",
+    "expired": "expired",
+    "verification_pending": "verification_pending",
+    "pending": "verification_pending",
+    "source_unavailable": "source_unavailable",
+    "manual_verification_required": "manual_review_required",
+    "manual_review_required": "manual_review_required",
+    "simulated_result": "source_unavailable",
+    "not_applicable": "source_unavailable",
+    "partial": "manual_review_required",
+    "error": "source_unavailable",
+}
+
+
+def _map_external_status(raw: str):
+    from app.schemas.engine import ExternalVerificationStatus
+
+    key = (raw or "").strip().lower()
+    mapped = _LAYER2_TO_ENGINE_STATUS.get(key, "source_unavailable")
+    return ExternalVerificationStatus(mapped)
+
+
+def to_document_result_out(run) -> "DocumentResultOut":  # noqa: F821
+    """Map a DocumentVerificationRun ORM row to the Phase 1 engine DTO."""
+    from datetime import datetime, timezone
+
+    from app.schemas.engine import (
+        DocumentResultOut,
+        EvidenceOut as EngineEvidenceOut,
+        FindingOut as EngineFindingOut,
+        VerificationMode,
+        VerificationResultOut,
+    )
+
+    ext_raw = (
+        run.external_verification_status.value
+        if hasattr(run.external_verification_status, "value")
+        else str(run.external_verification_status)
+    )
+    rule_raw = (
+        run.rule_validation_status.value
+        if hasattr(run.rule_validation_status, "value")
+        else str(run.rule_validation_status)
+    )
+    review_raw = (
+        run.review_status.value if hasattr(run.review_status, "value") else str(run.review_status)
+    )
+    summary = run.summary or {}
+    signature_status = str(summary.get("signature_status") or "not_applicable")
+
+    findings: list = []
+    verification_results: list = []
+    for check in run.checks or []:
+        layer = check.layer.value if hasattr(check.layer, "value") else str(check.layer)
+        ev = [
+            EngineEvidenceOut(
+                document_id=run.document_id,
+                snippet=(check.detail or "")[:240],
+                source=check.source.value if hasattr(check.source, "value") else str(check.source),
+            )
+        ]
+        findings.append(
+            EngineFindingOut(
+                id=check.id,
+                rule_id=check.check_code,
+                severity=check.severity or "info",
+                message=check.title or check.detail or check.check_code,
+                evidence=ev,
+                clause_ref="TODO: fill from handbook",
+            )
+        )
+        if "layer2" in layer or layer.endswith("external"):
+            src = check.source.value if hasattr(check.source, "value") else str(check.source)
+            mode = (
+                VerificationMode.SIMULATED
+                if src == "simulated_dev" or (check.outcome or "").lower() == "simulated_result"
+                else VerificationMode.REAL
+            )
+            verification_results.append(
+                VerificationResultOut(
+                    status=_map_external_status(check.outcome or ext_raw),
+                    mode=mode,
+                    official_verification=False,
+                    provider_name=check.check_code,
+                    provider_reference_id=None,
+                    timestamp=check.created_at or datetime.now(timezone.utc),
+                    request_summary=f"check={check.check_code}",
+                    response_summary=check.detail or check.outcome,
+                    scope_of_confirmation="adapter outcome only — not document authenticity",
+                )
+            )
+
+    if not verification_results:
+        from datetime import datetime, timezone
+
+        verification_results.append(
+            VerificationResultOut(
+                status=_map_external_status(ext_raw),
+                mode=VerificationMode.REAL,
+                official_verification=False,
+                provider_name="pipeline",
+                timestamp=run.completed_at or run.created_at or datetime.now(timezone.utc),
+                request_summary="document verification run",
+                response_summary=ext_raw,
+                scope_of_confirmation="layer status aggregate — not document authenticity",
+            )
+        )
+
+    return DocumentResultOut(
+        document_id=run.document_id,
+        requirement_code=run.config_code,
+        document_type=run.config_code,
+        rule_validation_status=rule_raw,
+        external_verification_status=_map_external_status(ext_raw),
+        review_status=review_raw,
+        signature_status=signature_status,
+        findings=findings,
+        forensic_signals=[],
+        verification_results=verification_results,
+        official_source_confirmed=False,
+    )
+
+
+def to_application_result_out(
+    *,
+    application_id: str,
+    runs: list,
+    rule_set_version: str = "v1",
+    engine_version: str = "praman-engine-0.1",
+    overall_status: str = "manual_review_required",
+) -> "ApplicationResultOut":  # noqa: F821
+    from datetime import datetime, timezone
+
+    from app.schemas.engine import ApplicationResultOut, TriageScoreOut
+
+    docs = [to_document_result_out(r) for r in runs]
+    unconfirmed = [d.requirement_code for d in docs if not d.official_source_confirmed]
+    if unconfirmed:
+        disclaimer = (
+            "IMPORTANT: The following documents were NOT confirmed by any official "
+            f"external source: {', '.join(unconfirmed)}. "
+            "All simulated results are marked [SIMULATED] and have official_verification=false. "
+            "Decision-support output; final decision rests with the competent authority."
+        )
+    else:
+        disclaimer = (
+            "All documents were verified against official sources. "
+            "Decision-support output; final decision rests with the competent authority."
+        )
+    return ApplicationResultOut(
+        application_id=application_id,
+        rule_set_version=rule_set_version,
+        engine_version=engine_version,
+        generated_at=datetime.now(timezone.utc),
+        documents=docs,
+        cross_doc_findings=[],
+        triage_score_breakdown=TriageScoreOut(total=0.0, signals=[], config_version="triage-v0"),
+        overall_status=overall_status,
+        report_disclaimer=disclaimer,
+    )

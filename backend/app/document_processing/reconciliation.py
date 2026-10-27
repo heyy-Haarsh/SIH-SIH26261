@@ -7,12 +7,15 @@ MANUAL_REVIEW. Never labels anything as fraud.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from app.document_processing.interfaces import ReconciliationModule
+from app.document_processing.normalize_text import ascii_fold
 from app.document_processing.types import (
     DiscrepancyDraft,
     DiscrepancyValue,
@@ -21,6 +24,13 @@ from app.document_processing.types import (
     ModuleStatus,
 )
 from app.models.enums import FindingSeverity, ReconciliationOutcome, ValidationOutcome
+
+_THRESHOLDS_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "verification_engine"
+    / "configs"
+    / "reconciliation_thresholds.json"
+)
 
 # Fields compared across documents of one application.
 RECONCILE_FIELDS = frozenset(
@@ -77,6 +87,39 @@ def field_label(name: str) -> str:
 def comparable(value: str) -> str:
     """Case/punctuation-insensitive token string for identity fields."""
     return _NON_ALNUM.sub(" ", (value or "").casefold()).strip()
+
+
+def load_fuzzy_threshold(field_name: str) -> int:
+    try:
+        data = json.loads(_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    except OSError:
+        return 85
+    fields = data.get("fields") or {}
+    if field_name in fields and "fuzzy_threshold" in fields[field_name]:
+        return int(fields[field_name]["fuzzy_threshold"])
+    return int((data.get("defaults") or {}).get("fuzzy_threshold") or 85)
+
+
+def fuzzy_comparable(field_name: str, value_a: str, value_b: str, threshold: int | None = None) -> str:
+    """Return match kind: exact | fuzzy | mismatch (using normalized/transliterated forms)."""
+    thr = threshold if threshold is not None else load_fuzzy_threshold(field_name)
+    na = ascii_fold(value_a) or comparable(value_a)
+    nb = ascii_fold(value_b) or comparable(value_b)
+    if na == nb:
+        return "exact" if (value_a or "").strip() == (value_b or "").strip() else "normalization"
+    try:
+        from rapidfuzz import fuzz  # type: ignore
+
+        score = fuzz.token_sort_ratio(na, nb)
+    except ImportError:
+        # Degrade: token overlap heuristic
+        ta, tb = set(na.split()), set(nb.split())
+        if not ta or not tb:
+            return "mismatch"
+        score = int(100 * len(ta & tb) / len(ta | tb))
+    if score >= thr:
+        return "fuzzy"
+    return "mismatch"
 
 
 def normalize_for_field(field_name: str, value: str) -> str:
@@ -266,12 +309,38 @@ class BasicReconciliationModule(ReconciliationModule):
                 )
         else:
             outcome = ReconciliationOutcome.MISMATCH
-            match_kind = None
-            title = f"{label} differs across documents"
-            description = (
-                f"Extracted values for '{label}' conflict across documents after normalization. "
-                "Requires officer confirmation — not a fraud determination."
-            )
+            # Fuzzy / transliteration pass for name-like fields (Phase 6)
+            fuzzy_fields = {"institution_name", "trust_name", "address", "registered_address"}
+            if field_name in fuzzy_fields and len(recs) >= 2:
+                kinds = {
+                    fuzzy_comparable(field_name, a.value, b.value)
+                    for i, a in enumerate(recs)
+                    for b in recs[i + 1 :]
+                }
+                if kinds and kinds <= {"exact", "normalization", "fuzzy"} and "mismatch" not in kinds:
+                    outcome = ReconciliationOutcome.MATCH
+                    match_kind = "fuzzy" if "fuzzy" in kinds else (
+                        "normalization" if "normalization" in kinds else "exact"
+                    )
+                    title = f"{label} matches via fuzzy/transliteration"
+                    description = (
+                        f"'{label}' matched using normalized values and fuzzy thresholds from config. "
+                        "Evidence shows original and normalized forms. Not a fraud determination."
+                    )
+                else:
+                    match_kind = None
+                    title = f"{label} differs across documents"
+                    description = (
+                        f"Extracted values for '{label}' conflict across documents after normalization. "
+                        "Requires officer confirmation — not a fraud determination."
+                    )
+            else:
+                match_kind = None
+                title = f"{label} differs across documents"
+                description = (
+                    f"Extracted values for '{label}' conflict across documents after normalization. "
+                    "Requires officer confirmation — not a fraud determination."
+                )
 
         fp = fingerprint_for(field_name, outcome, values)
         return DiscrepancyDraft(

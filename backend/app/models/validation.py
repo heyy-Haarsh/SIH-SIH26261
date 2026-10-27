@@ -64,6 +64,11 @@ class Finding(Base):
     rule_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     rule_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     handbook_ref: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Stable identity of "the same issue" across validation runs. Includes the version of every
+    # involved document, so a resolution never carries over once a document has been replaced.
+    fingerprint: Mapped[str] = mapped_column(
+        String(64), default="", server_default="", nullable=False
+    )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)

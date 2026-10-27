@@ -1,46 +1,67 @@
-import { Activity, HeartPulse, Plug, Scale, Users } from 'lucide-react'
+import { Activity, Plug, Scale, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
-import { DemoBanner } from '@/components/dashboard/DemoBanner'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { HealthBadge, overallLabel } from '@/components/admin/HealthBadge'
 import { api } from '@/services/api'
 import { useRole } from '@/app/RoleContext'
-import type { AdminStats, ApiHealth } from '@/types'
+import type { AdminStats, HealthComponent, SystemHealth } from '@/types'
+
+function CompactList({ items }: { items: HealthComponent[] }) {
+  return (
+    <ul className="space-y-2">
+      {items.map((item) => (
+        <li
+          key={item.id}
+          className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-border px-3 py-2"
+        >
+          <span className="min-w-0 truncate text-sm text-ink" title={item.message}>
+            {item.label}
+          </span>
+          <HealthBadge health={item.health} />
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export function AdminDashboard() {
   const { role } = useRole()
-  const [health, setHealth] = useState<ApiHealth | null>(null)
+  const [health, setHealth] = useState<SystemHealth | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
 
   useEffect(() => {
     api
-      .health()
-      .then(setHealth)
-      .catch(() => setHealthError('Backend health endpoint unreachable'))
+      .systemHealth(role)
+      .then((h) => {
+        setHealth(h)
+        setHealthError(null)
+      })
+      .catch(() => setHealthError('System health is unavailable — sign in as an administrator with the API running.'))
     api
       .adminStats(role)
-      .then(setStats)
-      .catch(() => setStatsError('Admin stats unavailable — sign in as admin with API running'))
+      .then((s) => {
+        setStats(s)
+        setStatsError(null)
+      })
+      .catch(() => setStatsError('Admin statistics unavailable'))
   }, [role])
 
-  return (
-    <AppShell title="System Overview" breadcrumbs={['Administrator', 'Overview']}>
-      <DemoBanner>
-        Administrator workspace. Integration tiles reflect configuration state — no live AICTE or
-        government connectors are implied unless explicitly configured.
-      </DemoBanner>
+  const overall = health ? overallLabel(health.status) : null
 
+  return (
+    <AppShell title="System overview" breadcrumbs={['Administrator', 'Overview']}>
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Managed users"
           value={stats?.userCount ?? '—'}
-          hint={statsError ? 'API offline' : 'Live'}
+          hint={statsError ? 'Unavailable' : 'Live'}
           icon={Users}
         />
         <StatCard
@@ -52,7 +73,7 @@ export function AdminDashboard() {
         <StatCard
           label="Live verification"
           value={stats?.liveVerificationEnabled ? 'On' : 'Off'}
-          hint="Safe default: off"
+          hint="Set in server configuration"
           icon={Plug}
         />
         <StatCard
@@ -63,114 +84,98 @@ export function AdminDashboard() {
         />
       </div>
 
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Link to="/admin/users">
-          <Button size="sm" variant="outline">
-            Users
-          </Button>
-        </Link>
-        <Link to="/admin/categories">
-          <Button size="sm" variant="outline">
-            Categories
-          </Button>
-        </Link>
-        <Link to="/admin/rules">
-          <Button size="sm" variant="outline">
-            Rules
-          </Button>
-        </Link>
-        <Link to="/admin/audit">
-          <Button size="sm" variant="outline">
-            Audit
-          </Button>
-        </Link>
-        <Link to="/admin/settings">
-          <Button size="sm" variant="outline">
-            Settings
-          </Button>
-        </Link>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="System health" description="Live probe when API is running" />
-          {health ? (
-            <dl className="space-y-2 text-sm">
-              <HealthRow label="Status" value={health.status} ok={health.status === 'ok'} />
-              <HealthRow label="Environment" value={health.environment} />
-              <HealthRow label="Database" value={health.database} />
-              <HealthRow label="Storage backend" value={health.storageBackend} />
-              <HealthRow
-                label="Demo auth"
-                value={health.demoAuth ? 'Enabled (dev only)' : 'Disabled'}
-                ok={!health.demoAuth}
-              />
-            </dl>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-ink-muted">
-              <HeartPulse size={16} />
-              {healthError ?? 'Checking…'}
-            </div>
-          )}
-        </Card>
-
-        <Card>
-          <CardHeader title="Integration status" description="Truthful connector states" />
-          <ul className="space-y-2">
-            {[
-              { name: 'Local filesystem storage', status: 'Active (dev adapter)', tone: 'pass' as const },
-              { name: 'MinIO object storage', status: 'Not configured', tone: 'neutral' as const },
-              {
-                name: 'Redis / Celery workers',
-                status: 'Not configured — sync local runner',
-                tone: 'neutral' as const,
-              },
-              {
-                name: 'AICTE institutional API',
-                status: 'No authorized access configured',
-                tone: 'warning' as const,
-              },
-              {
-                name: 'Issuing-authority verification',
-                status: stats?.liveVerificationEnabled
-                  ? 'Flag enabled — connector still requires credentials'
-                  : 'Mock adapter only',
-                tone: 'info' as const,
-              },
-              {
-                name: 'LLM extraction service',
-                status: 'Disabled — no API key',
-                tone: 'neutral' as const,
-              },
-            ].map((item) => (
-              <li
-                key={item.name}
-                className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-border px-3 py-2.5"
-              >
-                <span className="text-sm text-ink">{item.name}</span>
-                <Badge tone={item.tone}>{item.status}</Badge>
-              </li>
+      {stats?.applications && (
+        <Card className="mb-5">
+          <CardHeader
+            title="Applications by stage"
+            description="Same counts the Scrutiny Officer dashboard shows — one source for every role."
+          />
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {Object.entries(stats.applications.stageLabels).map(([stage, label]) => (
+              <div key={stage} className="rounded-[var(--radius-md)] border border-border px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wide text-ink-muted">{label}</div>
+                <div className="text-xl font-semibold text-ink">
+                  {stats.applications?.byStage[stage as keyof typeof stats.applications.byStage] ?? 0}
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">
+            {stats.applications.total} applications in total · {stats.applications.openClarifications}{' '}
+            open clarification(s) · administrators view these counts but do not decide applications.
+          </p>
         </Card>
-      </div>
-    </AppShell>
-  )
-}
+      )}
 
-function HealthRow({
-  label,
-  value,
-  ok,
-}: {
-  label: string
-  value: string
-  ok?: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-border pb-2 last:border-0">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className={ok === false ? 'font-medium text-amber-700' : 'font-medium text-ink'}>{value}</dd>
-    </div>
+      <div className="mb-5 flex flex-wrap gap-2">
+        {[
+          ['/admin/users', 'Users'],
+          ['/admin/categories', 'Categories'],
+          ['/admin/rules', 'Rules'],
+          ['/admin/handbook', 'Handbook references'],
+          ['/admin/integrations', 'Integrations'],
+          ['/admin/health', 'System health'],
+          ['/admin/audit', 'Audit trail'],
+          ['/admin/settings', 'Settings'],
+        ].map(([to, label]) => (
+          <Link key={to} to={to}>
+            <Button size="sm" variant="outline">
+              {label}
+            </Button>
+          </Link>
+        ))}
+      </div>
+
+      {healthError && (
+        <p role="alert" className="mb-4 text-sm text-status-failed">
+          {healthError}
+        </p>
+      )}
+
+      {health && (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {overall && <Badge tone={overall.tone}>{overall.label}</Badge>}
+            <span className="text-xs text-ink-muted">
+              {health.environment} · {health.activity.applicationsTotal} application(s) ·{' '}
+              {health.activity.auditEvents} audit event(s) in 24h
+            </span>
+          </div>
+          {health.warnings.length > 0 && (
+            <ul className="mb-4 list-disc space-y-1 rounded-[var(--radius-md)] border border-amber-200 bg-status-warning-bg px-6 py-2 text-xs text-status-warning">
+              {health.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader
+                title="Core services"
+                action={
+                  <Link to="/admin/health" className="text-xs text-accent underline">
+                    Details
+                  </Link>
+                }
+              />
+              <CompactList items={health.components} />
+            </Card>
+            <Card>
+              <CardHeader
+                title="External sources"
+                description="Shown as connected only when they truly are"
+                action={
+                  <Link to="/admin/integrations" className="text-xs text-accent underline">
+                    Manage
+                  </Link>
+                }
+              />
+              <CompactList items={health.integrations} />
+            </Card>
+          </div>
+        </>
+      )}
+      {!health && !healthError && <p className="text-sm text-ink-muted">Checking services…</p>}
+    </AppShell>
   )
 }

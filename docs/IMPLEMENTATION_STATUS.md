@@ -1,46 +1,42 @@
 # Implementation Status
 
-## Working
+## Working (Phases 1–8)
 
-- Monorepo frontend + backend scaffolding
-- Three-role UI shell (sidebar, top bar, demo role switcher)
-- Scrutiny Officer overview dashboard (synthetic mock stats)
-- Application queue + application details (checklist, documents, findings, verification, audit tabs)
-- Applicant dashboard, new application (API), document upload (API)
-- Administrator system overview with live health probe
-- FastAPI health, applications, documents, validation-runs, admin list endpoints
-- Backend RBAC boundaries for the three roles
-- File intake validation (extension, size, magic-byte warnings, SHA-256)
-- Deterministic **synthetic** rules engine (`SYN-RULE-*`)
-- Mock / local verification adapters with truthful statuses
-- Alembic project layout; `create_all` + seed on startup for local demo
-- Backend pytest suite; frontend typecheck/build scripts
-- **Phase 2 document intelligence:** inspect → classify → PDF text (PyMuPDF) → OCR (Tesseract when installed) → deterministic fields → evidence mapping → extraction runs → validation
-- Extraction APIs, OCR capability probe, Alembic migration `20261026_0001`
-- Frontend detail page loads live API extraction fields (mock only for synthetic demo IDs)
+- Monorepo: React/Vite frontend + FastAPI/SQLAlchemy/Alembic backend
+- Three-role demo shell with immediate role-home navigation
+- Applicant: create application, upload (versioned), deficiencies, resubmit
+- Officer: live queue/dashboard, application detail, scrutiny workflow, clarification/recommend/reject
+- Phase 2 extraction: PDF text / OCR (when available), fields, extraction runs
+- Phase 3 reconciliation with resolve + evidence
+- Phase 4 local forensics (metadata/structure/signature heuristics, duplicates) — not automatic fraud
+- Phase 5 explainable risk score + workflow statuses + audit
+- Phase 6 admin CRUD: users, categories/requirements, versioned rules, settings, searchable audit
+- Phase 7 three-layer document verification (configs + adapters + independent statuses)
+- Phase 8 hardening: upload size capping, structured errors, concurrent officer guards, enriched demo seed, health limitations, docs
+- Backend pytest suite; frontend typecheck/build
 
-## Mock / demo only
+## Synthetic / unavailable by design
 
-- Dashboard queue statistics (`frontend/src/mocks`)
-- Rich application detail narrative data for IDs like `app-1001` in the UI mock layer when API has no row
-- Demo role switcher (not real authentication)
-- Synthetic regulatory rules (not official AICTE APH clauses)
+- `SYN-RULE-*` and Phase 7 Layer 1 configs are **synthetic demo rules**, not official AICTE APH text
+- AICTE payment / building / fire / engineer / auditor adapters: **SOURCE_UNAVAILABLE** (no authorized connector)
+- Demo header auth (`X-Demo-Role`) — not production SSO
+- Nominatim geocode opt-in only (`ENABLE_NOMINATIM_GEOCODE`)
+- LLM extraction reserved behind `ENABLE_AI_EXTRACTION` (local PDF/OCR work without it)
 
-## Not yet implemented / unavailable by design
+## Still limited
 
-- LLM extraction (`ENABLE_AI_EXTRACTION` reserved; local PDF/OCR work without it)
-- Full DOCX structured extraction
-- In-viewer bounding-box highlighting (page refs work; boxes stored for later)
-- ML document classification
-- Document forensics / tamper analysis
-- Live AICTE or issuing-authority connectors
-- MinIO / Redis / Celery (interfaces reserved; local adapters used)
-- PDF scrutiny report export
-- Full admin CRUD UIs for users, categories, rules
-- Production PostgreSQL deployment hardening and IdP SSO
+- No PDF/DOCX scrutiny report export (JSON scrutiny report on verification runs)
+- No in-viewer bounding-box highlight (page refs stored)
+- No MinIO/Redis/Celery in default demo (local sync)
+- Full PKI certificate-chain validation not implemented (signature heuristics only)
+- `EXTRACTION_TIMEOUT_SECONDS` configured; wall-clock enforcement is best-effort / platform-dependent
 
-## Data retention (initial policy)
+## Demo seed (fresh DB)
 
-- Original uploads stored under `backend/uploads/` (gitignored)
-- Extracted values and reviewer annotations stored separately from binaries
-- Retention/deletion controls will be admin-configurable; until then, treat local uploads as ephemeral demo data and delete manually when finished
+| Application | Intent |
+|-------------|--------|
+| PRM-2025-1001 | Mismatch + expired fire + payment unavailable external |
+| PRM-2025-1002 | Cleaner complete mandatory set |
+| PRM-2025-1003 | Missing mandatory documents |
+
+See `docs/DEMO_WALKTHROUGH.md` and `docs/SETUP.md`.

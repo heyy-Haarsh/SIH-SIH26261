@@ -1,0 +1,6 @@
+Campus Satellite Map / Geotag
+
+Institution Name: Demo Institute of Technology
+Address: 12 Education Road, Pune, Maharashtra
+Latitude: 18.5204
+Longitude: 73.8567

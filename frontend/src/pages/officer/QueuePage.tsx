@@ -37,7 +37,7 @@ export function QueuePage() {
           !q ||
           a.applicationNumber.toLowerCase().includes(q) ||
           a.institutionName.toLowerCase().includes(q)
-        const matchS = statusFilter === 'all' || a.status === statusFilter
+        const matchS = statusFilter === 'all' || a.stage === statusFilter
         return matchQ && matchS
       }),
     [apps, query, statusFilter],
@@ -46,7 +46,7 @@ export function QueuePage() {
   return (
     <AppShell title="Application Queue" breadcrumbs={['Scrutiny Officer', 'Queue']}>
       <DemoBanner>
-        Persisted applications from the API. Filter by Phase 5 scrutiny statuses.
+        Persisted applications from the API. Filter by whose turn it is; each row still shows its exact status.
       </DemoBanner>
       <Card>
         <CardHeader title="Review queue" description={`${rows.length} applications shown`} />
@@ -70,14 +70,11 @@ export function QueuePage() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="all">All statuses</option>
-            <option value="submitted">Submitted</option>
-            <option value="processing">Processing</option>
+            <option value="all">All applications</option>
+            <option value="awaiting_scrutiny">Awaiting scrutiny</option>
             <option value="under_scrutiny">Under scrutiny</option>
-            <option value="clarification_required">Clarification required</option>
-            <option value="resubmitted">Resubmitted</option>
-            <option value="recommended">Recommended</option>
-            <option value="rejected">Rejected</option>
+            <option value="awaiting_applicant">Awaiting applicant</option>
+            <option value="decided">Decided</option>
           </Select>
         </div>
         <ApplicationTable rows={rows} detailBasePath="/officer/applications" />

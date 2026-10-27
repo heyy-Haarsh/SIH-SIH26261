@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.document_processing.intelligence_types import BBox, FieldCandidate, PageText
+from app.document_processing.normalize_text import compute_normalized_value
 from app.models.enums import ExtractionMethod
 
 _KEY_ALIASES: dict[str, str] = {
@@ -80,12 +81,44 @@ _KEY_ALIASES: dict[str, str] = {
     "longitude": "longitude",
     "lon": "longitude",
     "lng": "longitude",
+    # Affidavit 2
+    "signatory name": "signatory_name",
+    "name of signatory": "signatory_name",
+    "deponent name": "signatory_name",
+    "signatory designation": "signatory_designation",
+    "designation": "signatory_designation",
+    "execution date": "execution_date",
+    "date of execution": "execution_date",
+    "executed on": "execution_date",
+    "execution place": "execution_place",
+    "place of execution": "execution_place",
+    "stamp paper ref": "stamp_paper_ref",
+    "stamp paper reference": "stamp_paper_ref",
+    "e-stamp number": "stamp_paper_ref",
+    "estamp number": "stamp_paper_ref",
+    "stamp number": "stamp_paper_ref",
+    "notary details": "notary_details",
+    "notary": "notary_details",
+    "notary name": "notary_details",
+    # Hindi / Marathi (Devanagari) aliases — Phase 3
+    "संस्था का नाम": "institution_name",
+    "संस्थेचे नाव": "institution_name",
+    "हस्ताक्षरकर्ता": "signatory_name",
+    "स्वाक्षरकर्त्याचे नाव": "signatory_name",
+    "पदनाम": "signatory_designation",
+    "तारीख": "execution_date",
+    "स्थान": "execution_place",
+    "मुद्रांक": "stamp_paper_ref",
+    "नोटरी": "notary_details",
 }
 
-DATE_FIELDS = frozenset({"valid_until", "expiry_date", "issue_date"})
+DATE_FIELDS = frozenset({"valid_until", "expiry_date", "issue_date", "execution_date", "payment_date"})
 ID_FIELDS = frozenset({"registration_number", "certificate_number", "reference_number", "survey_number"})
 
-_LINE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 ()_.\-/]{1,48}?)\s*[:=\-]\s*(.+?)\s*$")
+_LINE_RE = re.compile(
+    r"^\s*([\w\u0900-\u097F][\w\u0900-\u097F ()_.\-/]{0,48}?)\s*[:=\-]\s*(.+?)\s*$",
+    re.UNICODE,
+)
 _DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y", "%d %b %Y", "%d %B %Y")
 _AREA_RE = re.compile(
     r"(?P<value>\d+(?:[.,]\d+)?)\s*(?P<unit>acres?|hectares?|sq\.?\s*m(?:eters?)?|sq\.?\s*ft|sqft)",
@@ -113,6 +146,9 @@ def parse_date(value: str) -> Optional[str]:
 
 
 def _normalize_label(label: str) -> str:
+    # Keep Devanagari intact for alias lookup; fold Latin to lower ascii tokens
+    if re.search(r"[\u0900-\u097F]", label):
+        return label.strip()
     return re.sub(r"[^a-z0-9]+", " ", label.lower()).strip()
 
 
@@ -147,7 +183,8 @@ class FieldExtractor:
                 m = _LINE_RE.match(line)
                 if not m:
                     continue
-                key = _KEY_ALIASES.get(_normalize_label(m.group(1)))
+                label_norm = _normalize_label(m.group(1))
+                key = _KEY_ALIASES.get(label_norm) or _KEY_ALIASES.get(m.group(1).strip())
                 if not key:
                     continue
                 raw = m.group(2).strip()
@@ -167,6 +204,11 @@ class FieldExtractor:
                 # Never strip leading zeros from identifier fields
                 if key in ID_FIELDS:
                     normalized = raw  # keep as-is
+                # Separate transliteration/ASCII form — never overwrite raw
+                if not normalized:
+                    normalized = compute_normalized_value(raw)
+                elif key not in DATE_FIELDS and key not in ID_FIELDS and key != "land_area":
+                    normalized = compute_normalized_value(raw, already=normalized)
 
                 method = (
                     ExtractionMethod.OCR
@@ -174,6 +216,13 @@ class FieldExtractor:
                     else ExtractionMethod.PDF_TEXT
                     if page.source == "pdf_text"
                     else ExtractionMethod.TEXT_KEY_VALUE
+                )
+                source = (
+                    "ocr"
+                    if page.source == "ocr"
+                    else "text_layer"
+                    if page.source == "pdf_text"
+                    else "text_layer"
                 )
                 cand = FieldCandidate(
                     field_name=key,
@@ -186,6 +235,8 @@ class FieldExtractor:
                     page_reference=f"p.{page.page_number} L{lineno}",
                     bbox=_find_bbox_for_value(page, raw),
                     unit=unit,
+                    raw_snippet=line.strip()[:240],
+                    source=source,
                 )
                 by_field[key].append(cand)
 
@@ -201,6 +252,8 @@ class FieldExtractor:
                     method=ExtractionMethod.FILENAME_METADATA,
                     confidence=None,
                     page_reference=None,
+                    raw_snippet=file_name[:240],
+                    source="filename_metadata",
                 )
             )
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, Optional
 
-from app.document_processing.extraction import field_label, parse_date
+from app.document_processing.text_utils import field_label, parse_date
 from app.document_processing.interfaces import RuleEvaluationModule
 from app.document_processing.types import (
     EvalContext,

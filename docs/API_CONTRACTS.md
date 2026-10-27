@@ -19,7 +19,10 @@ JSON responses use **camelCase** field names.
   "environment": "development",
   "database": "sqlite (development-only fallback)",
   "storageBackend": "local",
-  "demoAuth": true
+  "demoAuth": true,
+  "appVersion": "0.1.0",
+  "maxUploadMb": 25,
+  "limitations": ["…honesty banners…"]
 }
 ```
 
@@ -39,6 +42,8 @@ JSON responses use **camelCase** field names.
 {
   "documentId": "...",
   "validationRunId": "...",
+  "extractionRunId": "...",
+  "extractionStatus": "completed",
   "findings": [],
   "fileChecks": {
     "ok": true,
@@ -46,9 +51,44 @@ JSON responses use **camelCase** field names.
     "warnings": [],
     "sha256": "...",
     "source": "local_validation"
-  }
+  },
+  "pipelineOk": true,
+  "pipelineWarnings": []
 }
 ```
+
+`pipelineOk=false` / `pipelineWarnings` means extraction or validation did not fully succeed after a file was accepted — never treat as authenticity or compliance.
+
+## Workflow / scrutiny (Phase 5)
+
+| Method | Path | Roles |
+|--------|------|-------|
+| POST | `/applications/{id}/scrutiny/start` | officer, admin |
+| POST | `/applications/{id}/scrutiny/clarification` | officer, admin (assigned officer) |
+| POST | `/applications/{id}/scrutiny/decision` | officer, admin (assigned officer) |
+| POST | `/applications/{id}/resubmit` | applicant |
+| GET | `/deficiencies` | authenticated (applicant scoped) |
+
+## Document verification (Phase 7)
+
+| Method | Path | Roles |
+|--------|------|-------|
+| GET | `/document-verification/configs` | authenticated |
+| POST | `/applications/{id}/document-verification` | applicant, officer, admin |
+| GET | `/applications/{id}/document-verification` | authenticated |
+| POST | `/document-verification-checks/{id}/resolve` | officer, admin |
+
+Per-document statuses on `documents` / runs: `ruleValidationStatus`, `externalVerificationStatus`, `reviewStatus` (independent; L1 pass ≠ authenticity).
+
+## Admin (Phase 6)
+
+| Method | Path | Roles |
+|--------|------|-------|
+| GET/POST/PATCH | `/admin/users` | admin |
+| GET/POST/PATCH | `/admin/categories` | admin (GET also officer) |
+| GET/POST/PATCH | `/admin/rules` (+ versions/publish/reactivate) | admin (GET also officer) |
+| GET/PUT | `/admin/settings/{key}` | admin |
+| GET | `/admin/audit` | admin (filterable) |
 
 ## Extraction
 
@@ -62,15 +102,6 @@ JSON responses use **camelCase** field names.
 | GET | `/extraction/ocr-capability` | any authenticated | Truthful Tesseract status |
 
 Upload response may include `extractionRunId` and `extractionStatus` when `AUTO_EXTRACT_ON_UPLOAD=true`.
-
-## Admin
-
-| Method | Path | Roles |
-|--------|------|-------|
-| GET | `/admin/users` | admin |
-| GET | `/admin/rules` | admin, officer |
-| GET | `/admin/audit` | admin |
-| GET | `/admin/jobs` | admin |
 
 ## Verification honesty
 

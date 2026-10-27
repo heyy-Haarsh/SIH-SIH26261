@@ -1,21 +1,17 @@
 import {
   Activity,
   AlertTriangle,
+  BookOpen,
   Building2,
-  ClipboardCheck,
-  FileSearch,
-  FileText,
   FolderOpen,
   GitCompare,
   HeartPulse,
-  History,
   LayoutDashboard,
   ListChecks,
   Plug,
+  FilePlus2,
   Scale,
-  ScrollText,
   Settings,
-  Shield,
   Upload,
   Users,
   type LucideIcon,
@@ -26,6 +22,8 @@ export interface NavItem {
   label: string
   path: string
   icon: LucideIcon
+  /** Optional group heading shown above the first item of a group. */
+  section?: string
 }
 
 export const ROLE_HOME: Record<UserRole, string> = {
@@ -34,37 +32,34 @@ export const ROLE_HOME: Record<UserRole, string> = {
   admin: '/admin',
 }
 
+/**
+ * Every entry points at a real, working page. Detail views (documents, extracted data,
+ * findings, reports, decisions) live inside an application so they are not duplicated here.
+ */
 export const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   applicant: [
-    { label: 'Dashboard', path: '/applicant', icon: LayoutDashboard },
+    { label: 'Dashboard', path: '/applicant', icon: LayoutDashboard, section: 'My work' },
     { label: 'My Applications', path: '/applicant/applications', icon: FolderOpen },
-    { label: 'New Application', path: '/applicant/applications/new', icon: FileText },
-    { label: 'Document Checklist', path: '/applicant/checklist', icon: ListChecks },
-    { label: 'Document Uploads', path: '/applicant/uploads', icon: Upload },
-    { label: 'Pre-check Results', path: '/applicant/precheck', icon: ClipboardCheck },
-    { label: 'Deficiency Notices', path: '/applicant/deficiencies', icon: AlertTriangle },
-    { label: 'Application History', path: '/applicant/history', icon: History },
+    { label: 'New Application', path: '/applicant/applications/new', icon: FilePlus2 },
+    { label: 'Upload Documents', path: '/applicant/uploads', icon: Upload },
+    { label: 'Clarifications', path: '/applicant/deficiencies', icon: AlertTriangle },
   ],
   officer: [
-    { label: 'Overview', path: '/officer', icon: LayoutDashboard },
+    { label: 'Overview', path: '/officer', icon: LayoutDashboard, section: 'Scrutiny' },
     { label: 'Application Queue', path: '/officer/queue', icon: FolderOpen },
-    { label: 'Document Viewer', path: '/officer/documents', icon: FileSearch },
-    { label: 'Extracted Fields', path: '/officer/extracted', icon: ScrollText },
-    { label: 'Validation Findings', path: '/officer/findings', icon: Shield },
-    { label: 'Cross-doc Comparison', path: '/officer/comparison', icon: GitCompare },
-    { label: 'External Verification', path: '/officer/verification', icon: Plug },
-    { label: 'Review Decisions', path: '/officer/decisions', icon: ClipboardCheck },
-    { label: 'Scrutiny Reports', path: '/officer/reports', icon: FileText },
+    { label: 'Cross-document Review', path: '/officer/comparison', icon: GitCompare },
   ],
   admin: [
-    { label: 'System Overview', path: '/admin', icon: LayoutDashboard },
-    { label: 'Users & Roles', path: '/admin/users', icon: Users },
-    { label: 'App Categories', path: '/admin/categories', icon: Building2 },
-    { label: 'Document Requirements', path: '/admin/requirements', icon: ListChecks },
-    { label: 'Regulatory Rules', path: '/admin/rules', icon: Scale },
-    { label: 'Integrations', path: '/admin/integrations', icon: Plug },
-    { label: 'Audit Trail', path: '/admin/audit', icon: Activity },
+    { label: 'Overview', path: '/admin', icon: LayoutDashboard, section: 'Operations' },
     { label: 'System Health', path: '/admin/health', icon: HeartPulse },
+    { label: 'Audit Trail', path: '/admin/audit', icon: Activity },
+    { label: 'Integrations', path: '/admin/integrations', icon: Plug },
+    { label: 'Regulatory Rules', path: '/admin/rules', icon: Scale, section: 'Verification rules' },
+    { label: 'Handbook References', path: '/admin/handbook', icon: BookOpen },
+    { label: 'Users & Roles', path: '/admin/users', icon: Users, section: 'Configuration' },
+    { label: 'Application Categories', path: '/admin/categories', icon: Building2 },
+    { label: 'Document Requirements', path: '/admin/requirements', icon: ListChecks },
     { label: 'Settings', path: '/admin/settings', icon: Settings },
   ],
 }
+

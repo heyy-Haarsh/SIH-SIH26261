@@ -58,6 +58,7 @@ def create_application(
     user: User,
     *,
     category_code: str,
+    institution_name: str,
     program_name: str,
     academic_year: str,
 ):
@@ -80,6 +81,7 @@ def create_application(
         institution_id=user.institution_id,
         category_id=category.id,
         created_by_id=user.id,
+        institution_name=institution_name,
         program_name=program_name,
         academic_year=academic_year,
         contact_email=user.email,
@@ -95,7 +97,7 @@ def create_application(
         actor=user.name,
         actor_id=user.id,
         actor_role=user.role.value,
-        detail=f"Created {number}",
+        detail=f"Created {number} for {institution_name}",
         application_id=app.id,
     )
     db.commit()

@@ -12,9 +12,22 @@
       {"field": "issue_date", "not_future": true, "max_age_days": 900, "ambiguous_is_manual": true}
     ],
     "format_checks": [
-      {"field": "financial_year", "pattern": "^[0-9]{4}-[0-9]{2,4}$", "message": "Expected FY like 2024-25"}
+      {"field": "financial_year", "pattern": "^[0-9]{4}-[0-9]{2,4}$", "message": "Expected FY like 2024-25", "aph_clause": "TODO: fill from APH §X.Y"}
     ],
-    "cross_field_checks": []
+    "cross_field_checks": [],
+    "arithmetic_checks": [
+      {
+        "id": "BALANCE_SHEET_BALANCE",
+        "description": "Assets = Liabilities + Equity",
+        "fields_lhs": ["total_assets"],
+        "fields_rhs": ["total_liabilities", "total_equity"],
+        "tolerance_pct": 1.0,
+        "severity": "failed",
+        "aph_clause": "TODO: fill from APH §X.Y",
+        "source_note": "SYNTHETIC"
+      }
+    ],
+    "conditional_checks": []
   },
   "layer2": {
     "adapters": [

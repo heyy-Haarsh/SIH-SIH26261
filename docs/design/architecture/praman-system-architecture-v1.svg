@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+          </marker>
+          <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#0F766E"/>
+          </marker>
+          <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#B45309"/>
+          </marker>
+          <style>
+            .t-title { font: 700 28px "Segoe UI", Calibri, sans-serif; fill: #0F2744; }
+            .t-sub { font: 500 13px "Segoe UI", Calibri, sans-serif; fill: #475569; }
+            .t-h { font: 700 12px "Segoe UI", Calibri, sans-serif; fill: #0F2744; }
+            .t-h-inv { font: 700 12px "Segoe UI", Calibri, sans-serif; fill: #FFFFFF; }
+            .t-b { font: 500 11px "Segoe UI", Calibri, sans-serif; fill: #0F172A; }
+            .t-s { font: 400 10px "Segoe UI", Calibri, sans-serif; fill: #475569; }
+            .t-xs { font: 400 9px "Segoe UI", Calibri, sans-serif; fill: #64748B; }
+            .t-warn { font: 600 11px "Segoe UI", Calibri, sans-serif; fill: #0F2744; }
+            .band { fill: #FFFFFF; stroke: #CBD5E1; stroke-width: 1.25; }
+            .band-head { fill: #1B3A5F; }
+            .box { fill: #E8F1F8; stroke: #1B3A5F; stroke-width: 1.2; }
+            .box-w { fill: #FFFFFF; stroke: #1B3A5F; stroke-width: 1.4; }
+            .box-teal { fill: #E6F4F1; stroke: #0F766E; stroke-width: 1.6; }
+            .box-sim { fill: #FFF8E7; stroke: #B45309; stroke-width: 1.4; stroke-dasharray: 5 3; }
+            .box-plan { fill: #F3F4F6; stroke: #6B7280; stroke-width: 1.2; stroke-dasharray: 2 2; }
+            .box-out { fill: #FFFFFF; stroke: #0F766E; stroke-width: 1.4; }
+            .flow { fill: none; stroke: #475569; stroke-width: 1.4; marker-end: url(#arrow); }
+            .flow-teal { fill: none; stroke: #0F766E; stroke-width: 1.6; marker-end: url(#arrowTeal); }
+            .flow-loop { fill: none; stroke: #B45309; stroke-width: 1.6; stroke-dasharray: 6 4; marker-end: url(#arrowAmber); }
+            .flow-dash { fill: none; stroke: #64748B; stroke-width: 1.2; stroke-dasharray: 4 3; marker-end: url(#arrow); }
+          </style>
+        </defs>
+
+        <!-- Background -->
+        <rect width="1920" height="1080" fill="#F8FAFC"/>
+
+        <!-- Header -->
+        <rect x="0" y="0" width="1920" height="64" fill="#FFFFFF"/>
+        <line x1="0" y1="64" x2="1920" y2="64" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="36" y="30" class="t-title">PRAMAN System Architecture</text>
+        <text x="36" y="50" class="t-sub">SIH26261 · AI-assisted institutional application scrutiny · Implementation-accurate (Phases 1–8) · v1</text>
+        <rect x="1280" y="14" width="604" height="36" rx="4" fill="#FFF8E7" stroke="#B45309" stroke-width="1.2"/>
+        <text x="1294" y="36" class="t-warn">OCR success or Layer-1 rule PASS does NOT prove authenticity — officer retains final decision.</text>
+
+        <!-- ===================== ROW: USERS ===================== -->
+        <g transform="translate(24,78)">
+          <rect class="band" width="1872" height="86" rx="6"/>
+          <rect class="band-head" width="150" height="86" rx="6"/>
+          <rect x="140" class="band-head" width="10" height="86"/>
+          <text x="28" y="48" class="t-h-inv">USERS</text>
+          <!-- Applicant -->
+          <rect class="box-w" x="170" y="14" width="520" height="58" rx="4"/>
+          <text x="186" y="36" class="t-h">Institution / Applicant</text>
+          <text x="186" y="54" class="t-s">Create application · versioned upload · deficiencies · resubmit corrected docs</text>
+          <!-- Officer -->
+          <rect class="box-w" x="710" y="14" width="560" height="58" rx="4"/>
+          <text x="726" y="36" class="t-h">AICTE Scrutiny Officer</text>
+          <text x="726" y="54" class="t-s">Queue · claim · run verification/forensics · clarification · recommend / reject (audited)</text>
+          <!-- Admin -->
+          <rect class="box-w" x="1290" y="14" width="560" height="58" rx="4"/>
+          <text x="1306" y="36" class="t-h">System Administrator</text>
+          <text x="1306" y="54" class="t-s">Users · categories · requirements · versioned rules · settings · searchable audit</text>
+        </g>
+
+        <!-- ===================== ROW: FRONTEND ===================== -->
+        <g transform="translate(24,176)">
+          <rect class="band" width="1872" height="118" rx="6"/>
+          <rect class="band-head" width="150" height="118" rx="6"/>
+          <rect x="140" class="band-head" width="10" height="118"/>
+          <text x="16" y="42" class="t-h-inv">FRONTEND</text>
+          <text x="16" y="60" class="t-xs" fill="#DCE8F5">React · TS</text>
+          <text x="16" y="74" class="t-xs" fill="#DCE8F5">Vite · Tailwind</text>
+
+          <rect class="box" x="170" y="12" width="400" height="94" rx="4"/>
+          <text x="184" y="32" class="t-h">Applicant modules (live)</text>
+          <text x="184" y="50" class="t-s">Dashboard · Applications · New Application</text>
+          <text x="184" y="66" class="t-s">Document Uploads · Deficiency Notices</text>
+          <text x="184" y="82" class="t-xs">Placeholders: Checklist · Pre-check · History</text>
+          <text x="184" y="96" class="t-xs">Detail reuses officer Application Detail for own apps</text>
+
+          <rect class="box" x="586" y="12" width="420" height="94" rx="4"/>
+          <text x="600" y="32" class="t-h">Officer modules (live)</text>
+          <text x="600" y="50" class="t-s">Overview · Application Queue · Application Detail</text>
+          <text x="600" y="66" class="t-s">Cross-doc Comparison · three-layer verification UI</text>
+          <text x="600" y="82" class="t-xs">Placeholders: Viewer · Extracted · Findings</text>
+          <text x="600" y="96" class="t-xs">Verification · Decisions · Scrutiny Reports</text>
+
+          <rect class="box" x="1022" y="12" width="420" height="94" rx="4"/>
+          <text x="1036" y="32" class="t-h">Admin modules (live)</text>
+          <text x="1036" y="50" class="t-s">System Overview · Users &amp; Roles · Categories</text>
+          <text x="1036" y="66" class="t-s">Requirements · Regulatory Rules · Audit · Settings</text>
+          <text x="1036" y="88" class="t-xs">Placeholders: Integrations · System Health page</text>
+
+          <rect class="box-sim" x="1458" y="12" width="416" height="94" rx="4"/>
+          <text x="1472" y="32" class="t-h">Demo auth shell</text>
+          <text x="1472" y="50" class="t-s">TopBar role switcher → X-Demo-Role /</text>
+          <text x="1472" y="66" class="t-s">X-Demo-User-Id headers to API</text>
+          <text x="1472" y="88" class="t-xs">NOT production SSO · backend still enforces RBAC</text>
+        </g>
+
+        <!-- ===================== ROW: BACKEND ===================== -->
+        <g transform="translate(24,306)">
+          <rect class="band" width="1872" height="108" rx="6"/>
+          <rect class="band-head" width="150" height="108" rx="6"/>
+          <rect x="140" class="band-head" width="10" height="108"/>
+          <text x="20" y="42" class="t-h-inv">BACKEND</text>
+          <text x="20" y="60" class="t-xs" fill="#DCE8F5">FastAPI</text>
+          <text x="20" y="74" class="t-xs" fill="#DCE8F5">/api/v1</text>
+
+          <rect class="box" x="170" y="12" width="280" height="84" rx="4"/>
+          <text x="184" y="32" class="t-h">Auth / RBAC</text>
+          <text x="184" y="50" class="t-s">get_current_user · require_roles</text>
+          <text x="184" y="66" class="t-s">ensure_application_access</text>
+          <text x="184" y="82" class="t-xs">Demo headers → seeded users</text>
+
+          <rect class="box" x="466" y="12" width="520" height="84" rx="4"/>
+          <text x="480" y="32" class="t-h">API routers (implemented)</text>
+          <text x="480" y="50" class="t-s">applications · extraction · reconciliation · forensics</text>
+          <text x="480" y="66" class="t-s">workflow · doc_verification · admin · health</text>
+          <text x="480" y="84" class="t-xs">Structured errors · upload size capping · concurrent officer guards</text>
+
+          <rect class="box" x="1002" y="12" width="520" height="84" rx="4"/>
+          <text x="1016" y="32" class="t-h">Orchestration services</text>
+          <text x="1016" y="50" class="t-s">document · validation · workflow · scoring · audit</text>
+          <text x="1016" y="66" class="t-s">doc_verification · forensics · reconciliation · admin</text>
+          <text x="1016" y="84" class="t-xs">Synchronous local job runner (workers/tasks.py)</text>
+
+          <rect class="box-plan" x="1538" y="12" width="336" height="84" rx="4"/>
+          <text x="1552" y="32" class="t-h">Planned / optional infra</text>
+          <text x="1552" y="50" class="t-s">Celery / Redis async jobs</text>
+          <text x="1552" y="66" class="t-s">MinIO object storage</text>
+          <text x="1552" y="84" class="t-xs">Flags exist; default demo is local sync</text>
+        </g>
+
+        <!-- ===================== DOCUMENT INTELLIGENCE + 3 LAYERS ===================== -->
+        <g transform="translate(24,426)">
+          <!-- Document Intelligence -->
+          <rect class="band" width="700" height="300" rx="6"/>
+          <rect class="band-head" width="700" height="28" rx="6"/>
+          <rect y="20" class="band-head" width="700" height="8"/>
+          <text x="16" y="19" class="t-h-inv">DOCUMENT INTELLIGENCE  ·  document_processing/</text>
+
+          <rect class="box" x="14" y="42" width="160" height="70" rx="4"/>
+          <text x="24" y="62" class="t-h">1. Intake</text>
+          <text x="24" y="78" class="t-s">Sanitize · whitelist</text>
+          <text x="24" y="92" class="t-s">magic · size · SHA-256</text>
+
+          <rect class="box" x="188" y="42" width="160" height="70" rx="4"/>
+          <text x="198" y="62" class="t-h">2. Classify</text>
+          <text x="198" y="78" class="t-s">Requirement code</text>
+          <text x="198" y="92" class="t-s">+ semantic heuristic</text>
+
+          <rect class="box" x="362" y="42" width="160" height="70" rx="4"/>
+          <text x="372" y="62" class="t-h">3. PDF / OCR</text>
+          <text x="372" y="78" class="t-s">PyMuPDF text</text>
+          <text x="372" y="92" class="t-s">Tesseract optional</text>
+
+          <rect class="box" x="536" y="42" width="150" height="70" rx="4"/>
+          <text x="546" y="62" class="t-h">4. Fields</text>
+          <text x="546" y="78" class="t-s">Deterministic</text>
+          <text x="546" y="92" class="t-s">regex / key-value</text>
+
+          <rect class="box" x="14" y="128" width="220" height="70" rx="4"/>
+          <text x="24" y="148" class="t-h">5. Evidence mapping</text>
+          <text x="24" y="164" class="t-s">Page refs · bbox (pdf points)</text>
+          <text x="24" y="178" class="t-s">Never fabricate locations</text>
+
+          <rect class="box" x="250" y="128" width="210" height="70" rx="4"/>
+          <text x="260" y="148" class="t-h">6. Reconciliation</text>
+          <text x="260" y="164" class="t-s">Cross-document compare</text>
+          <text x="260" y="178" class="t-s">Resolve + evidence trail</text>
+
+          <rect class="box" x="476" y="128" width="210" height="70" rx="4"/>
+          <text x="486" y="148" class="t-h">7. Local forensics</text>
+          <text x="486" y="164" class="t-s">Metadata / structure /</text>
+          <text x="486" y="178" class="t-s">signature heuristics · duplicates</text>
+
+          <rect class="box-plan" x="14" y="214" width="672" height="70" rx="4"/>
+          <text x="24" y="236" class="t-h">AI / LLM extraction — planned / external-dependent</text>
+          <text x="24" y="254" class="t-s">ENABLE_AI_EXTRACTION reserved — no provider implemented. Local PDF/OCR works without it.</text>
+          <text x="24" y="270" class="t-xs">Synthetic SYN-RULE-* and Phase-7 Layer-1 configs are demo rules, not official AICTE APH text.</text>
+
+          <!-- micro arrows inside DI -->
+          <path class="flow" d="M174,77 H184"/>
+          <path class="flow" d="M348,77 H358"/>
+          <path class="flow" d="M522,77 H532"/>
+        </g>
+
+        <!-- Three-Layer Verification Engine -->
+        <g transform="translate(740,426)">
+          <rect class="band" width="784" height="300" rx="6"/>
+          <rect width="784" height="28" rx="6" fill="#0F766E"/>
+          <rect y="20" width="784" height="8" fill="#0F766E"/>
+          <text x="16" y="19" class="t-h-inv">THREE-LAYER VERIFICATION ENGINE  ·  verification_engine/  ·  conceptually separate</text>
+
+          <!-- L1 -->
+          <rect class="box-teal" x="14" y="42" width="756" height="72" rx="4"/>
+          <rect x="14" y="42" width="118" height="72" rx="4" fill="#0F766E"/>
+          <text x="28" y="82" class="t-h-inv">LAYER 1</text>
+          <text x="148" y="62" class="t-h">Rule Validation  ≠  authenticity</text>
+          <text x="148" y="78" class="t-s">Config-driven required fields · formats · date/expiry · cross-field checks (layer1.py + configs/*.json)</text>
+          <text x="148" y="94" class="t-s">Outputs RuleValidationStatus · [SYNTHETIC] demo rules · PASS never auto-establishes authenticity</text>
+
+          <!-- L2 -->
+          <rect class="box-teal" x="14" y="126" width="756" height="88" rx="4"/>
+          <rect x="14" y="126" width="118" height="88" rx="4" fill="#0F766E"/>
+          <text x="28" y="174" class="t-h-inv">LAYER 2</text>
+          <text x="148" y="146" class="t-h">External / Local Adapters  ≠  rule pass</text>
+          <text x="148" y="162" class="t-s">pdf_signature — LOCAL heuristics (not full PKI) · geocode_nominatim — REAL opt-in (Nominatim)</text>
+          <text x="148" y="178" class="t-s">HTTP connectors → simulated_issuers (mode=simulated → SIMULATED_RESULT) · circuit breaker + retry</text>
+          <text x="148" y="194" class="t-s">If issuers down / unconfigured → SOURCE_UNAVAILABLE (never fabricate verified_by_source)</text>
+
+          <!-- L3 -->
+          <rect class="box-teal" x="14" y="226" width="756" height="60" rx="4"/>
+          <rect x="14" y="226" width="118" height="60" rx="4" fill="#0F766E"/>
+          <text x="28" y="260" class="t-h-inv">LAYER 3</text>
+          <text x="148" y="248" class="t-h">Human Review Support  ≠  automated decision</text>
+          <text x="148" y="266" class="t-s">Review triggers · DocumentVerificationCheck · JSON scrutiny_report · officer resolve / recommend / reject</text>
+        </g>
+
+        <!-- Outputs column -->
+        <g transform="translate(1540,426)">
+          <rect class="band" width="356" height="300" rx="6"/>
+          <rect class="band-head" width="356" height="28" rx="6"/>
+          <rect y="20" class="band-head" width="356" height="8"/>
+          <text x="16" y="19" class="t-h-inv">OUTPUTS / DECISIONS</text>
+
+          <rect class="box-out" x="14" y="42" width="328" height="56" rx="4"/>
+          <text x="26" y="62" class="t-h">Statuses &amp; workflow</text>
+          <text x="26" y="80" class="t-s">submitted → processing → under_scrutiny</text>
+          <text x="26" y="92" class="t-xs">↔ clarification ↔ resubmitted → recommended|rejected</text>
+
+          <rect class="box-out" x="14" y="108" width="328" height="52" rx="4"/>
+          <text x="26" y="128" class="t-h">Findings &amp; deficiencies</text>
+          <text x="26" y="146" class="t-s">Validation findings · deficiency notices</text>
+          <text x="26" y="158" class="t-xs">Independent L1 / L2 / L3 statuses</text>
+
+          <rect class="box-out" x="14" y="170" width="328" height="52" rx="4"/>
+          <text x="26" y="190" class="t-h">Scrutiny report (JSON)</text>
+          <text x="26" y="208" class="t-s">On DocumentVerificationRun</text>
+          <text x="26" y="220" class="t-xs">PDF/DOCX package export — planned</text>
+
+          <rect class="box-out" x="14" y="232" width="328" height="52" rx="4"/>
+          <text x="26" y="252" class="t-h">Officer final decision</text>
+          <text x="26" y="270" class="t-s">Recommend / reject + reason (audited)</text>
+          <text x="26" y="282" class="t-xs">Score = prioritization aid only</text>
+        </g>
+
+        <!-- ===================== DATA + EXTERNAL ===================== -->
+        <g transform="translate(24,740)">
+          <rect class="band" width="1180" height="160" rx="6"/>
+          <rect class="band-head" width="150" height="160" rx="6"/>
+          <rect x="140" class="band-head" width="10" height="160"/>
+          <text x="34" y="56" class="t-h-inv">DATA</text>
+          <text x="22" y="76" class="t-xs" fill="#DCE8F5">SQLite demo</text>
+          <text x="16" y="90" class="t-xs" fill="#DCE8F5">SQLAlchemy</text>
+          <text x="28" y="104" class="t-xs" fill="#DCE8F5">Alembic</text>
+
+          <rect class="box" x="170" y="12" width="700" height="136" rx="4"/>
+          <text x="184" y="32" class="t-h">Persisted models (implemented)</text>
+          <text x="184" y="50" class="t-s">User · Institution · Application · ApplicationCategory · Document · DocumentVersion</text>
+          <text x="184" y="66" class="t-s">ExtractedField · ExtractionRun · RegulatoryRule · RuleVersion · SystemSetting</text>
+          <text x="184" y="82" class="t-s">ValidationRun · Finding · FindingEvidence · VerificationRequest</text>
+          <text x="184" y="98" class="t-s">DocumentVerificationRun · DocumentVerificationCheck · Forensics* · Reconciliation*</text>
+          <text x="184" y="114" class="t-s">DeficiencyNotice · ReviewDecision · AuditEvent</text>
+          <text x="184" y="134" class="t-xs">PostgreSQL intended for production (USE_SQLITE_FALLBACK=true for local demo)</text>
+
+          <rect class="box" x="886" y="12" width="276" height="136" rx="4"/>
+          <text x="900" y="36" class="t-h">File storage</text>
+          <text x="900" y="56" class="t-s">Local filesystem uploads/</text>
+          <text x="900" y="74" class="t-s">STORAGE_BACKEND=local</text>
+          <text x="900" y="92" class="t-s">Versioned paths under app/doc</text>
+          <text x="900" y="114" class="t-xs">MinIO — planned / external</text>
+        </g>
+
+        <g transform="translate(1220,740)">
+          <rect class="band" width="676" height="160" rx="6"/>
+          <rect class="band-head" width="150" height="160" rx="6"/>
+          <rect x="140" class="band-head" width="10" height="160"/>
+          <text x="18" y="48" class="t-h-inv">EXTERNAL</text>
+          <text x="22" y="68" class="t-xs" fill="#DCE8F5">&amp; optional</text>
+
+          <rect class="box" x="170" y="10" width="150" height="66" rx="4"/>
+          <text x="180" y="30" class="t-h">Tesseract</text>
+          <text x="180" y="46" class="t-s">REAL when installed</text>
+          <text x="180" y="60" class="t-xs">+ ENABLE_LOCAL_OCR</text>
+
+          <rect class="box" x="332" y="10" width="160" height="66" rx="4"/>
+          <text x="342" y="30" class="t-h">Nominatim</text>
+          <text x="342" y="46" class="t-s">REAL · opt-in only</text>
+          <text x="342" y="60" class="t-xs">ENABLE_NOMINATIM_GEOCODE</text>
+
+          <rect class="box-sim" x="504" y="10" width="156" height="66" rx="4"/>
+          <text x="512" y="28" class="t-h">simulated_issuers</text>
+          <text x="512" y="44" class="t-s">:8001 FastAPI</text>
+          <text x="512" y="58" class="t-xs">SIMULATED only</text>
+
+          <rect class="box-plan" x="170" y="86" width="240" height="62" rx="4"/>
+          <text x="180" y="106" class="t-h">Authorized live APIs</text>
+          <text x="180" y="122" class="t-s">AICTE / municipal / councils</text>
+          <text x="180" y="136" class="t-xs">UNAVAILABLE — no live connector</text>
+
+          <rect class="box-sim" x="424" y="86" width="236" height="62" rx="4"/>
+          <text x="434" y="106" class="t-h">Issuer fixtures (demo)</text>
+          <text x="434" y="122" class="t-s">fire · occupancy · engineer</text>
+          <text x="434" y="136" class="t-xs">payment · ICAI · e-stamp</text>
+        </g>
+
+        <!-- Feedback loop annotation -->
+        <g transform="translate(24,912)">
+          <rect x="0" y="0" width="1180" height="54" rx="6" fill="#FFF8E7" stroke="#B45309" stroke-width="1.4"/>
+          <text x="16" y="22" class="t-h">Clarification feedback loop (implemented)</text>
+          <text x="16" y="40" class="t-s">Officer → clarification / deficiency  →  Applicant corrects &amp; uploads new version  →  resubmit  →  re-extract · revalidate · re-verify (Layers 1–3)  →  officer decision</text>
+
+          <!-- Legend -->
+          <rect x="1200" y="0" width="696" height="54" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+          <text x="1216" y="20" class="t-h">Legend</text>
+          <rect x="1216" y="30" width="18" height="12" fill="#E8F1F8" stroke="#1B3A5F" stroke-width="1.2"/>
+          <text x="1240" y="40" class="t-xs">Implemented</text>
+          <rect x="1340" y="30" width="18" height="12" fill="#FFF8E7" stroke="#B45309" stroke-width="1.2" stroke-dasharray="4 2"/>
+          <text x="1364" y="40" class="t-xs">Simulated / demo</text>
+          <rect x="1490" y="30" width="18" height="12" fill="#F3F4F6" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="2 2"/>
+          <text x="1514" y="40" class="t-xs">Planned / external-dependent</text>
+          <rect x="1710" y="30" width="18" height="12" fill="#E6F4F1" stroke="#0F766E" stroke-width="1.4"/>
+          <text x="1734" y="40" class="t-xs">Verification layers</text>
+        </g>
+
+        <!-- Footer -->
+        <text x="36" y="996" class="t-xs">Evidence: backend/app/{api,services,document_processing,verification_engine,integrations,models} · frontend/src/{pages,App.tsx} · simulated_issuers/ · docs/IMPLEMENTATION_STATUS.md · PLAN.md resolved decisions</text>
+        <text x="36" y="1014" class="t-xs">Core principle: AI assists extraction; deterministic rules evaluate formal requirements; authorized sources verify when configured; human officers decide. No silent invention of AICTE handbook rules or live verification results.</text>
+        <text x="36" y="1032" class="t-xs">Diagram file: docs/design/architecture/praman-system-architecture-v1 · Do not treat Layer-1 PASS, OCR success, or SIMULATED_RESULT as authenticity confirmation.</text>
+        <text x="1700" y="1032" class="t-xs">16:9 · 1920×1080</text>
+
+        <!-- Vertical flow arrows between major bands (simplified) -->
+        <path class="flow-teal" d="M300,164 V176"/>
+        <path class="flow-teal" d="M960,164 V176"/>
+        <path class="flow-teal" d="M1580,164 V176"/>
+        <path class="flow-teal" d="M300,294 V306"/>
+        <path class="flow-teal" d="M960,294 V306"/>
+        <path class="flow" d="M400,414 V426"/>
+        <path class="flow" d="M1100,414 V426"/>
+        <path class="flow" d="M1700,414 V426"/>
+        <path class="flow" d="M380,726 V740"/>
+        <path class="flow-dash" d="M1550,726 V740"/>
+        <path class="flow-loop" d="M1860,576 C1900,576 1900,930 1180,939"/>
+      </svg>

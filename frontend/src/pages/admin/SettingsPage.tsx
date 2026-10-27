@@ -5,6 +5,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input, Label, Textarea } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
+import { errorText } from '@/components/scrutiny/scrutinyUi'
 import { api, ApiError } from '@/services/api'
 import { useRole } from '@/app/RoleContext'
 import type { AdminSetting } from '@/types'
@@ -41,8 +42,9 @@ export function SettingsPage() {
   return (
     <AppShell title="Verification & Settings" breadcrumbs={['Administrator', 'Settings']}>
       <DemoBanner>
-        Safe non-secret configuration only. API keys and passwords cannot be stored here. Live
-        verification stays off until authorized connectors are configured outside this demo.
+        Safe non-secret configuration only. API keys and passwords cannot be stored here. Settings can
+        only make the platform stricter than the server configuration; the note under each setting says
+        whether it is enforced or advisory. Switch integrations on or off on the Integrations page.
       </DemoBanner>
 
       {error && (
@@ -72,6 +74,15 @@ export function SettingsPage() {
               value={drafts[s.key] ?? '{}'}
               onChange={(e) => setDrafts((d) => ({ ...d, [s.key]: e.target.value }))}
             />
+            {s.enforcement && Object.keys(s.enforcement).length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-[11px] text-ink-muted">
+                {Object.entries(s.enforcement).map(([field, how]) => (
+                  <li key={field}>
+                    <code>{field}</code>: {how}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="mt-2">
               <Label>Change reason</Label>
               <Input
@@ -108,7 +119,7 @@ export function SettingsPage() {
                     setMsg(`Updated ${s.key}`)
                     load()
                   } catch (err) {
-                    setMsg(err instanceof Error ? err.message : 'Save failed')
+                    setMsg(errorText(err, 'Save failed'))
                   } finally {
                     setBusy(null)
                   }

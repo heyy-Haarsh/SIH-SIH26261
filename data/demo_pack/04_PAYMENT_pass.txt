@@ -1,0 +1,9 @@
+AICTE Payment Receipt
+
+Receipt Number: RCP-2025-4412
+Payment Amount: 150000.00
+Payment Date: 2025-06-12
+Transaction ID: TXN-VERIFIED-001
+Payment Mode: NEFT
+Institution Name: Demo Institute of Technology
+UTR Number: TXN-VERIFIED-001

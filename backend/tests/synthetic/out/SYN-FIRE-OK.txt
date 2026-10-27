@@ -1,0 +1,5 @@
+Certificate Number: FIRE-VERIFIED-001
+Issuing Authority: Fire Dept
+Issue Date: 2024-01-01
+Valid Until: 2028-01-01
+Institution Name: Demo Institute

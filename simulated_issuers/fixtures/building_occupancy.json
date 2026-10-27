@@ -1,0 +1,9 @@
+{
+  "BLD-VERIFIED-001": {"status": "verified", "expiry": "2030-01-01"},
+  "BLD-MISMATCH-001": {"status": "mismatch_detected", "mismatched_fields": ["address"]},
+  "BLD-EXPIRED-001": {"status": "expired", "expiry": "2019-01-01"},
+  "BLD-PENDING-001": {"status": "verification_pending"},
+  "BLD-UNAVAIL-001": {"status": "source_unavailable"},
+  "BLD-MANUAL-001": {"status": "manual_review_required"},
+  "_default": {"status": "verification_pending"}
+}

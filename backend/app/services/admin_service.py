@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import settings
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.models.audit import AuditEvent
 from app.models.category import ApplicationCategory
@@ -16,6 +17,7 @@ from app.models.enums import UserRole
 from app.models.rule import RegulatoryRule, RuleVersion
 from app.models.settings import SystemSetting
 from app.models.user import Institution, User
+from app.services import application_metrics_service
 from app.services.audit_service import record_audit
 
 # Logic keys understood by the synthetic rule engine / seed definitions.
@@ -30,8 +32,13 @@ KNOWN_LOGIC_KEYS = frozenset(
         "min_confidence",
         "required_fields",
         "max_days_expired",
+        "source_text",
+        "draft_origin",
     }
 )
+
+# `logic` values the shipped engine understands (see app.rules.engine and core.seed).
+KNOWN_LOGIC_VALUES = frozenset({"missing_mandatory", "filename_contains_expired", "cross_identity"})
 
 SENSITIVE_SETTING_KEYS = frozenset(
     {"secret_key", "llm_api_key", "aicte_api_key", "password", "token", "api_key"}
@@ -88,13 +95,15 @@ def _scrub_metadata(meta: dict | None) -> dict:
 def admin_stats(db: Session, user: User) -> dict[str, Any]:
     _require_admin(user)
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
-    ver = get_setting(db, "verification", create_default=True)
     return {
         "userCount": db.query(User).count(),
         "activeRuleCount": db.query(RegulatoryRule).filter(RegulatoryRule.is_active.is_(True)).count(),
         "categoryCount": db.query(ApplicationCategory).count(),
         "auditEvents24h": db.query(AuditEvent).filter(AuditEvent.created_at >= since).count(),
-        "liveVerificationEnabled": bool((ver.value or {}).get("enableLiveVerification", False)),
+        # Deployment flag is the single source of truth (the admin setting cannot exceed it).
+        "liveVerificationEnabled": bool(settings.enable_live_verification),
+        # Same function the officer dashboard uses, so both screens always agree.
+        "applications": application_metrics_service.application_metrics(db),
     }
 
 
@@ -371,6 +380,23 @@ def validate_rule_definition(
         warnings.append(f"Unrecognized definition keys (kept but unused by engine): {', '.join(unknown)}")
     if "params" in definition and not isinstance(definition["params"], dict):
         errors.append("definition.params must be an object.")
+    params = definition.get("params")
+    if code == "SYN-RULE-003" and isinstance(params, dict):
+        days = params.get("warn_within_days")
+        if days is not None and (isinstance(days, bool) or not isinstance(days, int) or days < 0 or days > 3650):
+            errors.append("params.warn_within_days must be a whole number of days between 0 and 3650.")
+        kws = params.get("filename_keywords")
+        if kws is not None and (
+            not isinstance(kws, list) or not kws or not all(isinstance(k, str) and k.strip() for k in kws)
+        ):
+            errors.append("params.filename_keywords must be a non-empty list of words.")
+        extra = sorted(set(params) - {"warn_within_days", "filename_keywords"})
+        if extra:
+            warnings.append(f"SYN-RULE-003 ignores these params: {', '.join(extra)}.")
+    if logic is not None and isinstance(logic, str) and logic not in KNOWN_LOGIC_VALUES:
+        warnings.append(
+            f"logic '{logic}' is not implemented by the rule engine; this rule is recorded as documentation only."
+        )
     if "required_fields" in definition and not isinstance(definition["required_fields"], list):
         errors.append("definition.required_fields must be a list.")
     if "min_confidence" in definition:
@@ -588,6 +614,7 @@ def create_rule_version(
         raise UnprocessableError("; ".join(errors))
     status = "published" if publish else "draft"
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    previous_current = rule.current_version
     # Append via relationship so delete-orphan cascade does not drop the new row.
     rv = RuleVersion(
         version=version,
@@ -595,19 +622,16 @@ def create_rule_version(
         status=status,
         change_reason=change_reason,
         created_by_id=actor.id,
-        effective_from=effective_from or (now if publish else None),
+        # Activation always takes effect immediately; drafts have no effective date yet.
+        effective_from=now if publish else None,
         published_at=now if publish else None,
     )
     rule.versions.append(rv)
     db.flush()
     if publish:
-        # Retire previous published versions' effective window without deleting history
-        for prev in list(rule.versions):
-            if prev is rv:
-                continue
-            if prev.status == "published" and prev.effective_to is None:
-                prev.effective_to = now
+        _retire_other_published(rule, keep=rv, now=now)
         rule.current_version = version
+        rule.is_active = True
     record_audit(
         db,
         action="admin.rule_version_created",
@@ -617,6 +641,14 @@ def create_rule_version(
         detail=f"code={rule.code}; version={version}; status={status}; reason={change_reason}",
         entity_type="rule_version",
         entity_id=rv.id,
+        metadata={
+            "ruleCode": rule.code,
+            "version": version,
+            "status": status,
+            "previousCurrentVersion": previous_current,
+            "definition": dict(definition or {}),
+            "reason": change_reason,
+        },
     )
     db.commit()
     db.expire_all()
@@ -652,14 +684,20 @@ def publish_rule_version(
     )
     if not ok:
         raise UnprocessableError(f"Cannot publish invalid configuration: {'; '.join(errors)}")
+    if target.status == "published" and rule.current_version == target.version and rule.is_active:
+        raise ConflictError(f"Version '{version}' is already the active version of {rule.code}.")
+    if (target.status or "") == "discarded":
+        raise UnprocessableError("A discarded draft cannot be activated. Create a new version instead.")
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    for prev in rule.versions:
-        if prev.status == "published" and prev.id != target.id and prev.effective_to is None:
-            prev.effective_to = now
+    previous_current = rule.current_version
+    was_status = target.status
+    _retire_other_published(rule, keep=target, now=now)
     target.status = "published"
     target.published_at = now
-    if target.effective_from is None:
-        target.effective_from = now
+    # A (re)activated version starts a fresh effective window; history of past windows is kept
+    # on the findings themselves (each finding stores the rule version that produced it).
+    target.effective_from = now
+    target.effective_to = None
     if change_reason:
         target.change_reason = f"{target.change_reason}; published: {change_reason}".strip("; ")
     rule.current_version = target.version
@@ -670,9 +708,19 @@ def publish_rule_version(
         actor=actor.name,
         actor_id=actor.id,
         actor_role=actor.role.value,
-        detail=f"code={rule.code}; version={version}; reason={change_reason or 'publish'}",
+        detail=(
+            f"code={rule.code}; version={version}; previous={previous_current}; "
+            f"reason={change_reason or 'publish'}"
+        ),
         entity_type="rule_version",
         entity_id=target.id,
+        metadata={
+            "ruleCode": rule.code,
+            "version": version,
+            "previousCurrentVersion": previous_current,
+            "versionStatusBefore": was_status,
+            "reason": change_reason or "publish",
+        },
     )
     db.commit()
     return (
@@ -693,6 +741,85 @@ def reactivate_rule_version(
     return publish_rule_version(db, actor, rule_id, version, change_reason=f"reactivate: {change_reason}")
 
 
+def _retire_other_published(rule: RegulatoryRule, *, keep: RuleVersion, now: datetime) -> None:
+    """Mark every other published version retired. Rows are kept; only their status/window change."""
+    for prev in rule.versions:
+        if prev is keep or prev.id == keep.id:
+            continue
+        if (prev.status or "published") == "published":
+            prev.status = "retired"
+            if prev.effective_to is None:
+                prev.effective_to = now
+
+
+def discard_draft_version(
+    db: Session, actor: User, rule_id: str, version: str, *, change_reason: str
+) -> RegulatoryRule:
+    """Withdraw a draft that was never activated. Published/retired versions can never be discarded."""
+    _require_admin(actor)
+    change_reason = (change_reason or "").strip()
+    if len(change_reason) < 3:
+        raise UnprocessableError("A reason (at least 3 characters) is required.")
+    rule = (
+        db.query(RegulatoryRule)
+        .options(joinedload(RegulatoryRule.versions))
+        .filter(RegulatoryRule.id == rule_id)
+        .first()
+    )
+    if not rule:
+        raise NotFoundError("Rule not found")
+    target = next((v for v in rule.versions if v.version == version), None)
+    if not target:
+        raise NotFoundError("Rule version not found")
+    if (target.status or "") != "draft":
+        raise UnprocessableError("Only an unactivated draft can be discarded; activated versions are history.")
+    target.status = "discarded"
+    target.change_reason = f"{target.change_reason}; discarded: {change_reason}".strip("; ")
+    record_audit(
+        db,
+        action="admin.rule_version_discarded",
+        actor=actor.name,
+        actor_id=actor.id,
+        actor_role=actor.role.value,
+        detail=f"code={rule.code}; version={version}; reason={change_reason}",
+        entity_type="rule_version",
+        entity_id=target.id,
+        metadata={"ruleCode": rule.code, "version": version, "reason": change_reason},
+    )
+    db.commit()
+    return (
+        db.query(RegulatoryRule)
+        .options(joinedload(RegulatoryRule.versions))
+        .filter(RegulatoryRule.id == rule.id)
+        .one()
+    )
+
+
+def rule_usage(db: Session, user: User, rule_id: str) -> dict[str, Any]:
+    """How many recorded findings each version of a rule has produced (history is never rewritten)."""
+    if user.role not in (UserRole.ADMIN, UserRole.OFFICER):
+        raise ForbiddenError("Insufficient permissions.")
+    from sqlalchemy import func
+
+    from app.models.validation import Finding
+
+    rule = db.get(RegulatoryRule, rule_id)
+    if not rule:
+        raise NotFoundError("Rule not found")
+    rows = (
+        db.query(Finding.rule_version, func.count(Finding.id))
+        .filter(Finding.rule_code == rule.code)
+        .group_by(Finding.rule_version)
+        .all()
+    )
+    return {
+        "ruleCode": rule.code,
+        "currentVersion": rule.current_version,
+        "findingsByVersion": {(v or "unversioned"): n for v, n in rows},
+        "note": "Past findings keep the rule version that produced them; activating a new version only affects future runs.",
+    }
+
+
 def preview_validate_rule(db: Session, actor: User, data: dict[str, Any]) -> dict[str, Any]:
     _require_admin(actor)
     existing = {r.code for r in db.query(RegulatoryRule).all()}
@@ -708,11 +835,21 @@ def preview_validate_rule(db: Session, actor: User, data: dict[str, Any]) -> dic
     return {"valid": ok, "errors": errors, "warnings": warnings}
 
 
+def _aware(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def active_rule_runtimes(db: Session) -> tuple[dict[str, Any], set[str]]:
-    """Return (code→RuleRuntime overlays, disabled codes) for the evaluation engine."""
+    """Return (code→RuleRuntime overlays, disabled codes) for the evaluation engine.
+
+    Only ``published`` versions inside their effective window are used; drafts, retired and
+    discarded versions never reach the engine.
+    """
     from app.rules.engine import RuleRuntime
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(timezone.utc)
     rules = (
         db.query(RegulatoryRule)
         .options(joinedload(RegulatoryRule.versions))
@@ -728,22 +865,27 @@ def active_rule_runtimes(db: Session) -> tuple[dict[str, Any], set[str]]:
             v
             for v in rule.versions
             if (getattr(v, "status", None) or "published") == "published"
-            and (v.effective_from is None or v.effective_from <= now)
-            and (getattr(v, "effective_to", None) is None or v.effective_to > now)
+            and (_aware(v.effective_from) is None or _aware(v.effective_from) <= now)
+            and (_aware(getattr(v, "effective_to", None)) is None or _aware(v.effective_to) > now)
         ]
         if not published:
-            # Fall back to current_version pointer even if dates missing (seeded rows)
-            published = [v for v in rule.versions if v.version == rule.current_version]
+            # Fall back to the current_version pointer for seeded rows that predate lifecycle
+            # status — but never to a draft/retired/discarded row.
+            published = [
+                v
+                for v in rule.versions
+                if v.version == rule.current_version
+                and (getattr(v, "status", None) or "published") == "published"
+            ]
         if not published:
             continue
-        published.sort(key=lambda v: v.created_at or now, reverse=True)
+        published.sort(key=lambda v: _aware(v.created_at) or now, reverse=True)
         ver = published[0]
         params = dict((ver.definition or {}).get("params") or {})
         if "logic" in (ver.definition or {}):
             params = {**params, "logic": ver.definition["logic"]}
         out[rule.code] = RuleRuntime(version=ver.version, params=params)
     return out, disabled
-
 
 # ---- settings ---------------------------------------------------------------
 
@@ -778,7 +920,12 @@ def list_settings(db: Session, user: User) -> list[SystemSetting]:
     _require_admin(user)
     for key in ("verification", "uploads"):
         get_setting(db, key, create_default=True)
-    return db.query(SystemSetting).order_by(SystemSetting.key).all()
+    return (
+        db.query(SystemSetting)
+        .filter(SystemSetting.key != "integrations")
+        .order_by(SystemSetting.key)
+        .all()
+    )
 
 
 def update_setting(
@@ -799,26 +946,189 @@ def update_setting(
         lk = str(k).lower()
         if any(s in lk for s in ("secret", "password", "token", "api_key", "credential")):
             raise UnprocessableError(f"Refusing to store sensitive field '{k}' in settings.")
+    if key == "integrations":
+        raise UnprocessableError(
+            "Integration switches are managed from the Integrations screen, not as a raw setting."
+        )
+    value = validate_setting_value(key, value)
     row = get_setting(db, key, create_default=True)
+    before = dict(row.value or {})
     row.value = value
     row.updated_by_id = actor.id
     row.change_reason = change_reason
+    changed = sorted(k for k in set(before) | set(value) if before.get(k) != value.get(k))
     record_audit(
         db,
         action="admin.setting_updated",
         actor=actor.name,
         actor_id=actor.id,
         actor_role=actor.role.value,
-        detail=f"key={key}; reason={change_reason}",
+        detail=f"key={key}; changed={', '.join(changed) or 'nothing'}; reason={change_reason}",
         entity_type="system_setting",
         entity_id=row.id,
+        metadata={
+            "key": key,
+            "changedFields": changed,
+            "before": {k: before.get(k) for k in changed},
+            "after": {k: value.get(k) for k in changed},
+            "reason": change_reason,
+        },
     )
     db.commit()
     db.refresh(row)
+    from app.core import runtime_config
+
+    runtime_config.load_from_db(db)
     return row
 
 
+_VERIFICATION_KEYS = {
+    "enableLiveVerification": bool,
+    "preferSimulatedAdapters": bool,
+    "requireManualReviewOnUnavailable": bool,
+    "maxConcurrentVerificationRequests": int,
+    "note": str,
+}
+_UPLOAD_KEYS = {"maxUploadMb": int, "allowedExtensions": list, "autoExtractOnUpload": bool}
+
+# Which settings actually change behaviour, so the screen never implies more control than exists.
+SETTING_ENFORCEMENT: dict[str, dict[str, str]] = {
+    "uploads": {
+        "maxUploadMb": "enforced (can only be lowered below the deployment limit)",
+        "allowedExtensions": "enforced (can only narrow the deployment list)",
+        "autoExtractOnUpload": "enforced",
+    },
+    "verification": {
+        "enableLiveVerification": "controlled by deployment configuration",
+        "preferSimulatedAdapters": "advisory",
+        "requireManualReviewOnUnavailable": "advisory — unavailable sources always need manual review",
+        "maxConcurrentVerificationRequests": "advisory",
+    },
+}
+
+
+def validate_setting_value(key: str, value: dict[str, Any]) -> dict[str, Any]:
+    from app.core.config import settings as env
+
+    schema = {"verification": _VERIFICATION_KEYS, "uploads": _UPLOAD_KEYS}.get(key)
+    if schema is None:
+        return value
+    errors: list[str] = []
+    for k, v in value.items():
+        want = schema.get(k)
+        if want is None:
+            errors.append(f"Unknown field '{k}'. Allowed: {', '.join(sorted(schema))}.")
+            continue
+        if want is int and (isinstance(v, bool) or not isinstance(v, int)):
+            errors.append(f"{k} must be a whole number.")
+        elif want is bool and not isinstance(v, bool):
+            errors.append(f"{k} must be true or false.")
+        elif want is str and not isinstance(v, str):
+            errors.append(f"{k} must be text.")
+        elif want is list and (not isinstance(v, list) or not all(isinstance(i, str) for i in v)):
+            errors.append(f"{k} must be a list of file extensions.")
+    if not errors:
+        if key == "uploads":
+            if "maxUploadMb" in value and not 1 <= value["maxUploadMb"] <= env.max_upload_mb:
+                errors.append(
+                    f"maxUploadMb must be between 1 and {env.max_upload_mb} (the deployment limit)."
+                )
+            if "allowedExtensions" in value:
+                chosen = {e.strip().lower().lstrip(".") for e in value["allowedExtensions"] if e.strip()}
+                if not chosen:
+                    errors.append("allowedExtensions cannot be empty.")
+                outside = sorted(chosen - set(env.allowed_extension_set))
+                if outside:
+                    errors.append(
+                        f"These types are not allowed by the deployment: {', '.join(outside)}. "
+                        f"Allowed: {', '.join(sorted(env.allowed_extension_set))}."
+                    )
+        if key == "verification":
+            if value.get("enableLiveVerification") and not env.enable_live_verification:
+                errors.append(
+                    "Live verification can only be switched on in the server configuration "
+                    "(ENABLE_LIVE_VERIFICATION) together with authorized credentials."
+                )
+            n = value.get("maxConcurrentVerificationRequests")
+            if n is not None and not 1 <= n <= 50:
+                errors.append("maxConcurrentVerificationRequests must be between 1 and 50.")
+    if errors:
+        raise UnprocessableError(" ".join(errors), code="invalid_setting")
+    return value
+
+
 # ---- audit ------------------------------------------------------------------
+
+
+def _audit_filtered_query(
+    db: Session,
+    *,
+    action: str | None = None,
+    actor: str | None = None,
+    actor_role: str | None = None,
+    application_id: str | None = None,
+    application_number: str | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    category: str | None = None,
+    q: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+):
+    from app.models.application import Application
+
+    query = db.query(AuditEvent)
+    if action:
+        query = query.filter(AuditEvent.action.ilike(f"%{action.strip()}%"))
+    if category:
+        query = query.filter(AuditEvent.action.ilike(f"{category.strip()}.%"))
+    if actor:
+        query = query.filter(AuditEvent.actor_name.ilike(f"%{actor.strip()}%"))
+    if actor_role:
+        query = query.filter(AuditEvent.actor_role == actor_role.strip().lower())
+    if application_id:
+        query = query.filter(AuditEvent.application_id == application_id)
+    if application_number:
+        ids = [
+            a.id
+            for a in db.query(Application.id)
+            .filter(Application.application_number.ilike(f"%{application_number.strip()}%"))
+            .all()
+        ]
+        query = query.filter(AuditEvent.application_id.in_(ids or ["__none__"]))
+    if entity_type:
+        query = query.filter(AuditEvent.entity_type == entity_type)
+    if entity_id:
+        query = query.filter(AuditEvent.entity_id == entity_id)
+    if date_from:
+        query = query.filter(AuditEvent.created_at >= date_from)
+    if date_to:
+        query = query.filter(AuditEvent.created_at <= date_to)
+    if q:
+        like = f"%{q.strip()}%"
+        matching_apps = [
+            a.id
+            for a in db.query(Application.id)
+            .filter(
+                or_(
+                    Application.application_number.ilike(like),
+                    Application.institution_name.ilike(like),
+                )
+            )
+            .all()
+        ]
+        conds = [
+            AuditEvent.detail.ilike(like),
+            AuditEvent.action.ilike(like),
+            AuditEvent.actor_name.ilike(like),
+            AuditEvent.entity_type.ilike(like),
+            AuditEvent.entity_id == q.strip(),
+            AuditEvent.application_id == q.strip(),
+        ]
+        if matching_apps:
+            conds.append(AuditEvent.application_id.in_(matching_apps))
+        query = query.filter(or_(*conds))
+    return query
 
 
 def search_audit(
@@ -827,8 +1137,12 @@ def search_audit(
     *,
     action: str | None = None,
     actor: str | None = None,
+    actor_role: str | None = None,
     application_id: str | None = None,
+    application_number: str | None = None,
     entity_type: str | None = None,
+    entity_id: str | None = None,
+    category: str | None = None,
     q: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
@@ -838,42 +1152,126 @@ def search_audit(
     _require_admin(user)
     limit = max(1, min(int(limit), 200))
     offset = max(0, int(offset))
-    query = db.query(AuditEvent)
-    if action:
-        query = query.filter(AuditEvent.action.ilike(f"%{action.strip()}%"))
-    if actor:
-        query = query.filter(AuditEvent.actor_name.ilike(f"%{actor.strip()}%"))
-    if application_id:
-        query = query.filter(AuditEvent.application_id == application_id)
-    if entity_type:
-        query = query.filter(AuditEvent.entity_type == entity_type)
-    if date_from:
-        query = query.filter(AuditEvent.created_at >= date_from)
-    if date_to:
-        query = query.filter(AuditEvent.created_at <= date_to)
-    if q:
-        like = f"%{q.strip()}%"
-        query = query.filter(
-            or_(
-                AuditEvent.detail.ilike(like),
-                AuditEvent.action.ilike(like),
-                AuditEvent.actor_name.ilike(like),
-            )
-        )
+    query = _audit_filtered_query(
+        db,
+        action=action,
+        actor=actor,
+        actor_role=actor_role,
+        application_id=application_id,
+        application_number=application_number,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        category=category,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+    )
     total = query.count()
-    items = query.order_by(AuditEvent.created_at.desc()).offset(offset).limit(limit).all()
+    items = (
+        query.order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc()).offset(offset).limit(limit).all()
+    )
     return items, total
 
 
-def audit_event_to_dict(e: AuditEvent) -> dict[str, Any]:
+def audit_export_rows(
+    db: Session, user: User, *, limit: int = 5000, **filters: Any
+) -> list[AuditEvent]:
+    _require_admin(user)
+    query = _audit_filtered_query(db, **filters)
+    return query.order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc()).limit(max(1, min(limit, 20000))).all()
+
+
+def audit_facets(db: Session, user: User) -> dict[str, Any]:
+    """Values the audit filters can offer, with counts, so the screen can use dropdowns."""
+    _require_admin(user)
+    from sqlalchemy import func
+
+    actions = dict(
+        db.query(AuditEvent.action, func.count(AuditEvent.id)).group_by(AuditEvent.action).all()
+    )
+    categories: dict[str, int] = {}
+    for name, n in actions.items():
+        cat = name.split(".", 1)[0] if "." in name else "other"
+        categories[cat] = categories.get(cat, 0) + n
+    roles = dict(
+        db.query(AuditEvent.actor_role, func.count(AuditEvent.id)).group_by(AuditEvent.actor_role).all()
+    )
+    entities = {
+        k: n
+        for k, n in db.query(AuditEvent.entity_type, func.count(AuditEvent.id))
+        .group_by(AuditEvent.entity_type)
+        .all()
+        if k
+    }
+    first, last = db.query(func.min(AuditEvent.created_at), func.max(AuditEvent.created_at)).one()
+    return {
+        "categories": [{"value": k, "count": v} for k, v in sorted(categories.items())],
+        "actions": [{"value": k, "count": v} for k, v in sorted(actions.items())],
+        "actorRoles": [{"value": k, "count": v} for k, v in sorted(roles.items()) if k],
+        "entityTypes": [{"value": k, "count": v} for k, v in sorted(entities.items())],
+        "total": sum(actions.values()),
+        "firstEventAt": first,
+        "lastEventAt": last,
+    }
+
+
+def _action_label(action: str) -> str:
+    tail = action.split(".", 1)[-1].replace("_", " ").strip()
+    return (tail[:1].upper() + tail[1:]) if tail else action
+
+
+def _application_numbers(db: Session, events: list[AuditEvent]) -> dict[str, str]:
+    from app.models.application import Application
+
+    ids = {e.application_id for e in events if e.application_id}
+    if not ids:
+        return {}
+    return {
+        a.id: a.application_number
+        for a in db.query(Application.id, Application.application_number).filter(Application.id.in_(ids)).all()
+    }
+
+
+def audit_events_to_dicts(db: Session, events: list[AuditEvent], *, full: bool = False) -> list[dict[str, Any]]:
+    numbers = _application_numbers(db, events)
+    return [audit_event_to_dict(e, application_number=numbers.get(e.application_id or ""), full=full) for e in events]
+
+
+def audit_event_detail(db: Session, user: User, event_id: str) -> dict[str, Any]:
+    _require_admin(user)
+    ev = db.get(AuditEvent, event_id)
+    if not ev:
+        raise NotFoundError("Audit event not found")
+    related_q = db.query(AuditEvent).filter(AuditEvent.id != ev.id)
+    conds = []
+    if ev.entity_id:
+        conds.append(AuditEvent.entity_id == ev.entity_id)
+    if ev.application_id:
+        conds.append(AuditEvent.application_id == ev.application_id)
+    related: list[AuditEvent] = []
+    if conds:
+        related = related_q.filter(or_(*conds)).order_by(AuditEvent.created_at.desc()).limit(15).all()
+    out = audit_events_to_dicts(db, [ev], full=True)[0]
+    out["related"] = audit_events_to_dicts(db, related)
+    return out
+
+
+def audit_event_to_dict(
+    e: AuditEvent, *, application_number: str | None = None, full: bool = False
+) -> dict[str, Any]:
+    detail = e.detail or ""
     return {
         "id": e.id,
         "action": e.action,
+        "label": _action_label(e.action),
+        "category": e.action.split(".", 1)[0] if "." in e.action else "other",
         "actor": e.actor_name,
+        "actorId": e.actor_id,
         "actorRole": e.actor_role,
         "timestamp": e.created_at,
-        "detail": (e.detail or "")[:1000],
+        "detail": detail if full else detail[:1000],
         "applicationId": e.application_id,
+        "applicationNumber": application_number,
         "entityType": e.entity_type,
         "entityId": e.entity_id,
         "metadata": _scrub_metadata(e.event_metadata if isinstance(e.event_metadata, dict) else {}),
@@ -942,4 +1340,5 @@ def setting_to_dict(s: SystemSetting) -> dict[str, Any]:
         "updatedById": s.updated_by_id,
         "changeReason": s.change_reason,
         "updatedAt": s.updated_at,
+        "enforcement": SETTING_ENFORCEMENT.get(s.key, {}),
     }

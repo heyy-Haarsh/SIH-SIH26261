@@ -104,6 +104,17 @@ def _get_app(db: Session, application_id: str) -> Application:
     return app
 
 
+def _ensure_officer_may_act(app: Application, user: User, *, action: str) -> None:
+    """Prevent concurrent officer actions once an application is claimed."""
+    if user.role == UserRole.ADMIN:
+        return
+    if app.assigned_officer_id and app.assigned_officer_id != user.id:
+        raise ConflictError(
+            f"Another officer is assigned; cannot {action} concurrently. "
+            "Admin override required, or claim a different application."
+        )
+
+
 def _transition(
     db: Session,
     app: Application,
@@ -250,6 +261,7 @@ def request_clarification(
         raise UnprocessableError("title (≥3) and description (≥5) are required.")
 
     app = _get_app(db, application_id)
+    _ensure_officer_may_act(app, user, action="request clarification")
     _transition(
         db,
         app,
@@ -324,6 +336,23 @@ def respond_deficiency(
     return notice
 
 
+MAX_RESUBMIT_NOTE = 2000
+
+
+def resubmit_blockers(db: Session, app: Application) -> list[str]:
+    """Plain-language reasons an applicant cannot resubmit yet (empty list = ready)."""
+    open_notices = (
+        db.query(DeficiencyNotice)
+        .filter(
+            DeficiencyNotice.application_id == app.id,
+            DeficiencyNotice.status == DeficiencyStatus.OPEN,
+        )
+        .order_by(DeficiencyNotice.created_at)
+        .all()
+    )
+    return [f"Respond to the clarification request: “{n.title}”" for n in open_notices]
+
+
 def resubmit(db: Session, user: User, application_id: str, *, note: str = "") -> dict:
     if user.role != UserRole.APPLICANT:
         raise ForbiddenError("Only applicants may resubmit.")
@@ -335,10 +364,25 @@ def resubmit(db: Session, user: User, application_id: str, *, note: str = "") ->
         ApplicationStatus.DEFICIENCY,
     ):
         raise UnprocessableError(
-            "Resubmit is only allowed from clarification_required (or legacy deficiency)."
+            "Resubmit is only allowed while the officer's clarification request is open.",
+            code="resubmit_not_allowed",
+        )
+    note = (note or "").strip()
+    if len(note) > MAX_RESUBMIT_NOTE:
+        raise UnprocessableError(
+            f"The resubmission note is too long (max {MAX_RESUBMIT_NOTE} characters).",
+            code="note_too_long",
+        )
+    blockers = resubmit_blockers(db, app)
+    if blockers:
+        # Every open clarification must be answered before the officer sees the application again.
+        raise UnprocessableError(
+            "Resubmission is blocked: " + "; ".join(blockers),
+            code="open_clarifications",
+            extra={"blockers": blockers},
         )
 
-    # Close responded deficiencies; leave open ones (officer may still need them)
+    # Close responded deficiencies (the applicant's response stays on the record)
     responded = (
         db.query(DeficiencyNotice)
         .filter(
@@ -369,13 +413,35 @@ def resubmit(db: Session, user: User, application_id: str, *, note: str = "") ->
         )
     )
 
+    # Persist the resubmission itself first: if reprocessing fails the applicant's response,
+    # the closed notices and the RESUBMITTED status must not be lost (officer can re-run).
+    db.commit()
+
     # Re-run full processing; preserves prior findings in DB (new validation run adds new ones)
-    mark_processing(db, app, actor=user)
-    db.flush()
     from app.services.validation_service import run_validation
 
-    run_validation(db, app, triggered_by=user.id, actor_name=user.name)
-    # run_validation commits; reload and ensure under_scrutiny
+    try:
+        mark_processing(db, _get_app(db, application_id), actor=user)
+        db.flush()
+        run_validation(db, _get_app(db, application_id), triggered_by=user.id, actor_name=user.name)
+    except Exception as exc:  # noqa: BLE001 — never lose the resubmission
+        db.rollback()
+        app = _get_app(db, application_id)
+        app.status = ApplicationStatus.RESUBMITTED
+        app.last_transition_at = utcnow()
+        app.last_transition_note = "Reprocessing failed after resubmission; officer re-run needed."
+        record_audit(
+            db,
+            action="workflow.resubmit_reprocess_failed",
+            actor="system",
+            actor_role="system",
+            detail=f"{exc.__class__.__name__} during automatic re-validation",
+            application_id=app.id,
+        )
+        db.commit()
+        return application_detail(db, _get_app(db, application_id))
+
+    # run_validation commits; reload and ensure we never leave the application in PROCESSING
     app = _get_app(db, application_id)
     if app.status == ApplicationStatus.PROCESSING:
         mark_under_scrutiny(db, app, actor=user)
@@ -403,6 +469,8 @@ def resolve_finding(
     finding = db.query(Finding).filter(Finding.id == finding_id).first()
     if not finding:
         raise NotFoundError("Finding not found")
+    app = _get_app(db, finding.application_id)
+    _ensure_officer_may_act(app, user, action="resolve findings")
     # Preserve original severity/outcome; only status changes
     finding.status = status
     record_audit(
@@ -411,10 +479,9 @@ def resolve_finding(
         actor=user.name,
         actor_id=user.id,
         actor_role=user.role.value,
-        detail=f"finding={finding.id}; status={status.value}; reason={reason}",
+        detail=f"finding={finding.id}; status={status.value}; reason={reason[:200]}",
         application_id=finding.application_id,
     )
-    app = _get_app(db, finding.application_id)
     scoring_service.apply_score_to_application(db, app)
     db.commit()
     db.refresh(finding)
@@ -476,6 +543,7 @@ def add_note(db: Session, user: User, application_id: str, *, content: str) -> d
     if len(content) < 3:
         raise UnprocessableError("Note content is required.")
     app = _get_app(db, application_id)
+    _ensure_officer_may_act(app, user, action="add notes")
     db.add(
         ReviewDecision(
             application_id=app.id,

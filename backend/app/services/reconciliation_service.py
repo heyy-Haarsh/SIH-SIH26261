@@ -78,9 +78,22 @@ def collect_field_records(db: Session, application_id: str) -> tuple[list[FieldR
                 continue
             if ef.confidence is not None and ef.confidence < 0.55 and not ef.corrected_value:
                 continue
-            value = ef.corrected_value or ef.normalized_value or ef.value
+            # Prefer raw extracted value (D-20). Only use structured normalized forms
+            # for dates/areas where ISO/unit canonicalization is intentional.
+            value = ef.corrected_value or ef.value
+            if not ef.corrected_value and ef.normalized_value:
+                if ef.field_name in {
+                    "valid_until",
+                    "expiry_date",
+                    "issue_date",
+                    "execution_date",
+                    "payment_date",
+                    "land_area",
+                }:
+                    value = ef.normalized_value
             if not (value or "").strip():
                 continue
+            evidence_raw = ef.corrected_value or ef.value or value
             field_records.append(
                 FieldRecord(
                     field_name=ef.field_name,
@@ -93,7 +106,12 @@ def collect_field_records(db: Session, application_id: str) -> tuple[list[FieldR
                     evidence_snippet=(
                         f'{version.file_name}'
                         + (f' p.{ef.page_number}' if ef.page_number else "")
-                        + f': "{value}"'
+                        + f': "{evidence_raw}"'
+                        + (
+                            f' (normalized: "{ef.normalized_value}")'
+                            if ef.normalized_value and ef.normalized_value != evidence_raw
+                            else ""
+                        )
                     ),
                 )
             )

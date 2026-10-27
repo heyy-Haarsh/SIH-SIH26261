@@ -1,0 +1,9 @@
+{
+  "TXN-VERIFIED-001": {"status": "verified"},
+  "TXN-MISMATCH-001": {"status": "mismatch_detected", "mismatched_fields": ["payment_amount"]},
+  "TXN-EXPIRED-001": {"status": "expired"},
+  "TXN-PENDING-001": {"status": "verification_pending"},
+  "TXN-UNAVAIL-001": {"status": "source_unavailable"},
+  "TXN-MANUAL-001": {"status": "manual_review_required"},
+  "_default": {"status": "verification_pending"}
+}

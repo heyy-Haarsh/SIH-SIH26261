@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.extraction import (
@@ -84,7 +84,7 @@ def _run_out(run, fields=None, document_id: str = "") -> ExtractionRunOut:
 
 
 @router.get("/extraction/ocr-capability", response_model=OcrCapabilityOut)
-def ocr_capability(_: User = Depends(get_current_user)):
+def ocr_capability(_: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN))):
     return OcrCapabilityOut(**extraction_service.ocr_capability())
 
 
@@ -93,7 +93,7 @@ def start_extraction(
     document_id: str,
     body: ExtractionStartIn | None = None,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.APPLICANT, UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     opts = body or ExtractionStartIn()
     run = extraction_service.start_extraction(
@@ -113,7 +113,7 @@ def start_extraction(
 def latest_extraction(
     document_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     run = extraction_service.get_latest_extraction_for_document(db, user, document_id)
     if not run:
@@ -128,7 +128,7 @@ def latest_extraction(
 def get_extraction_run(
     run_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     run = extraction_service.get_extraction_run(db, user, run_id)
     # Resolve document id via version
@@ -146,7 +146,7 @@ def get_extraction_run(
 def list_extraction_fields(
     run_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
 ):
     run = extraction_service.get_extraction_run(db, user, run_id)
     from app.models.document import DocumentVersion
@@ -161,7 +161,7 @@ def correct_extracted_field(
     field_id: str,
     body: FieldCorrectionIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
 ):
     ef = extraction_service.correct_field(db, user, field_id, corrected_value=body.corrected_value)
     from app.models.document import DocumentVersion

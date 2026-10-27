@@ -1,0 +1,86 @@
+version: v1
+connectors:
+  fire_certificate:
+    connector_name: SimulatedFireSafetyConnector
+    mode: simulated
+    base_url_env: FIRE_ISSUER_BASE_URL
+    verify_path: /issuers/fire-safety/verify
+    timeout_seconds: 10
+    retries: 3
+    retry_backoff_factor: 2
+    fallback_status: source_unavailable
+    failure_threshold: 3
+    cooldown_seconds: 30
+  building_permission:
+    connector_name: SimulatedBuildingOccupancyConnector
+    mode: simulated
+    base_url_env: BUILDING_ISSUER_BASE_URL
+    verify_path: /issuers/building-occupancy/verify
+    timeout_seconds: 10
+    retries: 3
+    retry_backoff_factor: 2
+    fallback_status: source_unavailable
+    failure_threshold: 3
+    cooldown_seconds: 30
+  engineer_credential:
+    connector_name: SimulatedStructuralEngineerConnector
+    mode: simulated
+    base_url_env: STRUCTURAL_ISSUER_BASE_URL
+    verify_path: /issuers/structural-engineer/verify
+    timeout_seconds: 10
+    retries: 3
+    retry_backoff_factor: 2
+    fallback_status: source_unavailable
+    failure_threshold: 3
+    cooldown_seconds: 30
+  aicte_payment:
+    connector_name: SimulatedAICTEPaymentConnector
+    mode: simulated
+    base_url_env: AICTE_PAYMENT_ISSUER_BASE_URL
+    verify_path: /issuers/aicte-payment/verify
+    timeout_seconds: 10
+    retries: 3
+    retry_backoff_factor: 2
+    fallback_status: source_unavailable
+    failure_threshold: 3
+    cooldown_seconds: 30
+  auditor_credential:
+    connector_name: SimulatedICAIMembershipConnector
+    mode: simulated
+    base_url_env: ICAI_ISSUER_BASE_URL
+    verify_path: /issuers/icai-membership/verify
+    timeout_seconds: 10
+    retries: 3
+    retry_backoff_factor: 2
+    fallback_status: source_unavailable
+    failure_threshold: 3
+    cooldown_seconds: 30
+  affidavit_estamp:
+    connector_name: SimulatedAffidavitEStampConnector
+    mode: simulated
+    base_url_env: ESTAMP_ISSUER_BASE_URL
+    verify_path: /issuers/affidavit-estamp/verify
+    timeout_seconds: 10
+    retries: 3
+    retry_backoff_factor: 2
+    fallback_status: source_unavailable
+    failure_threshold: 3
+    cooldown_seconds: 30
+  geocode_nominatim:
+    connector_name: NominatimConnector
+    mode: real
+    base_url_env: NOMINATIM_BASE_URL
+    verify_path: ""
+    timeout_seconds: 15
+    retries: 2
+    retry_backoff_factor: 2
+    fallback_status: source_unavailable
+  pdf_signature:
+    connector_name: LocalPdfSignatureAdapter
+    mode: real
+    base_url_env: ""
+    verify_path: ""
+    timeout_seconds: 5
+    retries: 1
+    retry_backoff_factor: 1
+    fallback_status: source_unavailable

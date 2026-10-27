@@ -157,7 +157,12 @@ class SemanticDocumentCategory(StrEnum):
     BUILDING = "building"
     TRUST_OR_SOCIETY = "trust_or_society"
     AFFIDAVIT = "affidavit"
+    AFFIDAVIT_2 = "affidavit_2"
     AFFILIATION = "affiliation"
+    AICTE_PAYMENT_RECEIPT = "aicte_payment_receipt"
+    AUDITED_ACCOUNTS = "audited_accounts"
+    STRUCTURAL_STABILITY = "structural_stability"
+    SATELLITE_MAP = "satellite_map"
     OTHER = "other"
     UNKNOWN = "unknown"
 

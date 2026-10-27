@@ -9,6 +9,7 @@ def _create_app(client):
         headers=auth_headers("applicant"),
         json={
             "category_code": "NEW-ENG",
+            "institution_name": "Test Institute of Technology",
             "program_name": "Workflow CSE",
             "academic_year": "2025-26",
         },

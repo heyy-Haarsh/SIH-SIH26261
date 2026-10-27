@@ -7,6 +7,7 @@ def test_upload_txt_triggers_extraction_and_fields(client):
         headers=auth_headers("applicant"),
         json={
             "category_code": "NEW-ENG",
+            "institution_name": "Test Institute of Technology",
             "program_name": "B.Tech Demo",
             "academic_year": "2025-26",
         },
@@ -69,7 +70,7 @@ def test_unauthorized_document_extraction(client):
     create = client.post(
         "/api/v1/applications",
         headers=auth_headers("applicant"),
-        json={"category_code": "EOA", "program_name": "X", "academic_year": "2025-26"},
+        json={"category_code": "EOA", "institution_name": "Test Institute of Technology", "program_name": "X", "academic_year": "2025-26"},
     )
     app_id = create.json()["id"]
     upload = client.post(
