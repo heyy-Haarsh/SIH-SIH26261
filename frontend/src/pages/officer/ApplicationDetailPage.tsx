@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Download, FileText, Info } from 'lucide-react'
+import { Download, FileText, Info, Plug } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { DemoBanner } from '@/components/dashboard/DemoBanner'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -117,6 +117,22 @@ export function ApplicationDetailPage() {
     }
   }
 
+  async function checkIssuers() {
+    setBusy(true)
+    setWorkflowMsg(null)
+    try {
+      await api.runApplicationDocVerification(role, detail!.id)
+      setWorkflowMsg(
+        'Issuer check finished. Results are from the local demo issuer — not an official authority.',
+      )
+      await refreshAll()
+    } catch (err) {
+      setWorkflowMsg(errorText(err, 'Issuer check failed. Is the simulated issuer running on port 8001?'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function downloadPdf() {
     setBusy(true)
     setWorkflowMsg(null)
@@ -146,15 +162,26 @@ export function ApplicationDetailPage() {
       actions={
         <>
           {source === 'api' && (
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Download size={14} />}
-              disabled={busy}
-              onClick={() => void downloadPdf()}
-            >
-              Download PDF report
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Plug size={14} />}
+                disabled={busy}
+                onClick={() => void checkIssuers()}
+              >
+                Check with issuer
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Download size={14} />}
+                disabled={busy}
+                onClick={() => void downloadPdf()}
+              >
+                Download PDF report
+              </Button>
+            </>
           )}
           {canStart && (
             <Button size="sm" disabled={busy} onClick={() => void startScrutiny()}>

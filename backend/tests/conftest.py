@@ -12,6 +12,8 @@ os.environ["USE_SQLITE_FALLBACK"] = "true"
 os.environ["DEMO_AUTH_ENABLED"] = "true"
 os.environ["UPLOAD_DIR"] = str(TEST_UPLOADS)
 os.environ["APP_ENV"] = "test"
+os.environ["USE_SIMULATED_HTTP_ISSUERS"] = "false"
+os.environ["ENABLE_LIVE_VERIFICATION"] = "false"
 
 # Clear cached settings / engines if re-imported in same session
 from app.core.config import get_settings

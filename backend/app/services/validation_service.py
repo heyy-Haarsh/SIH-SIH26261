@@ -308,6 +308,15 @@ def run_validation(
     )
     forensics_drafts = forensics_service.drafts_for_validation(db, application.id)
 
+    from app.verification_engine.pipeline import run_for_application
+
+    run_for_application(
+        db,
+        application,
+        validation_run_id=run.id,
+        commit=False,
+    )
+
     ctx = EvalContext(
         category_code=application.category.code if application.category else "",
         program_name=application.program_name,
