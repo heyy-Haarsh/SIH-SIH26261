@@ -4,12 +4,50 @@ from __future__ import annotations
 
 import io
 import logging
+import shutil
+from pathlib import Path
 from typing import Optional
 
 from app.core.config import get_settings
 from app.document_processing.intelligence_types import PageText
 
 logger = logging.getLogger("praman.ocr")
+
+_WINDOWS_DEFAULTS = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+)
+_last_logged_message: str | None = None
+
+
+def resolve_tesseract_cmd() -> Optional[str]:
+    """Find the Tesseract executable. PATH is preferred; the default Windows install is next."""
+    settings = get_settings()
+    candidates: list[str] = []
+    configured = (settings.tesseract_cmd or "").strip()
+    if configured:
+        candidates.append(configured)
+    found = shutil.which("tesseract")
+    if found:
+        candidates.append(found)
+    candidates.extend(_WINDOWS_DEFAULTS)
+    for path in candidates:
+        if Path(path).is_file():
+            return str(Path(path))
+    return None
+
+
+def _log_status(status: dict) -> dict:
+    """Log a status change once. Repeated upload checks must not flood the log."""
+    global _last_logged_message
+    message = str(status.get("message") or "")
+    if message and message != _last_logged_message:
+        _last_logged_message = message
+        if status.get("available"):
+            logger.info("ocr_ready %s", message)
+        else:
+            logger.warning("ocr_unavailable %s", message)
+    return status
 
 
 def tesseract_status() -> dict:
@@ -28,29 +66,36 @@ def tesseract_status() -> dict:
         "languages_missing": wanted[:],
         "marathi_supported": False,
         "available": False,
+        "tesseract_cmd": None,
         "message": "",
     }
     if not settings.enable_local_ocr:
         status["message"] = "Local OCR is disabled (ENABLE_LOCAL_OCR=false)."
-        return status
+        return _log_status(status)
 
     try:
         import pytesseract
         from pytesseract import TesseractNotFoundError
 
         status["pytesseract_installed"] = True
+        cmd = resolve_tesseract_cmd()
+        if cmd and hasattr(pytesseract, "pytesseract"):
+            pytesseract.pytesseract.tesseract_cmd = cmd
+            status["tesseract_cmd"] = cmd
         try:
             ver = pytesseract.get_tesseract_version()
             status["tesseract_cmd_found"] = True
             status["tesseract_version"] = str(ver)
         except TesseractNotFoundError:
             status["message"] = (
-                "Tesseract executable not found. Install Tesseract OCR and ensure it is on PATH."
+                "Tesseract executable not found. Install Tesseract OCR, add it to PATH, "
+                "or set TESSERACT_CMD to the executable."
             )
-            return status
+            return _log_status(status)
         except Exception as exc:  # noqa: BLE001
             status["message"] = f"Could not query Tesseract version: {exc.__class__.__name__}"
-            return status
+            logger.warning("ocr_version_check_failed", exc_info=exc)
+            return _log_status(status)
 
         try:
             langs = pytesseract.get_languages(config="")
@@ -66,6 +111,7 @@ def tesseract_status() -> dict:
                     f"Available: {', '.join(sorted(langs)[:20])}."
                 )
                 status["available"] = False
+                return _log_status(status)
             elif missing:
                 # Degrade: OCR still runs with the installed languages; state what is lost.
                 status["available"] = True
@@ -79,10 +125,11 @@ def tesseract_status() -> dict:
                 status["message"] = f"OCR ready (langs={'+'.join(usable)})."
         except Exception as exc:  # noqa: BLE001
             status["message"] = f"Could not list Tesseract languages: {exc.__class__.__name__}"
-        return status
+            logger.warning("ocr_language_check_failed", exc_info=exc)
+        return _log_status(status)
     except ImportError:
         status["message"] = "pytesseract package is not installed."
-        return status
+        return _log_status(status)
 
 
 class OCRProcessor:

@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     # Document intelligence (local; no cloud required)
     enable_local_pdf_extraction: bool = True
     enable_local_ocr: bool = True
+    # Optional absolute path. Empty means PATH, then the default Windows install directory.
+    tesseract_cmd: str = ""
     # Tesseract langs, "eng+hin+mar" or "eng,hin,mar". Marathi (mar) / Hindi (hin) need the
     # matching tessdata installed; missing packs degrade (English-only OCR) with a stated limitation.
     ocr_languages: str = "eng+hin+mar"

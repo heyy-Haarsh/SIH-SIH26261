@@ -131,6 +131,14 @@ def build_document_check(*, requirement_name: str, run, file_checks: dict | None
         elif (file_checks or {}).get("warnings"):
             clarity_message = "The file is readable. Minor file advisories were noted."
 
+        for warning in run.warnings or []:
+            if not isinstance(warning, str) or not warning.startswith("clarity:"):
+                continue
+            _prefix, level, message = (warning.split(":", 2) + ["", ""])[:3]
+            if level in ("unclear", "unreadable") and message:
+                clarity = level
+                clarity_message = message
+
     # ---- type match ------------------------------------------------------------------
     if status in (ExtractionRunStatus.FAILED.value, ExtractionRunStatus.UNSUPPORTED.value):
         type_match = "not_checked"
@@ -140,6 +148,13 @@ def build_document_check(*, requirement_name: str, run, file_checks: dict | None
         type_msg = (
             f"We could not tell from the content whether this is a {requirement_name}. "
             "Please confirm it is the right file."
+        )
+    elif run.category_confidence is not None and run.category_confidence < 0.5:
+        # A file name, or a single weak keyword, is not enough to call a match or a mismatch.
+        type_match = "unclear"
+        type_msg = (
+            f"This might be a {detected}, but the document text is not clear enough to confirm "
+            f"it is a {requirement_name}. Please check that you uploaded the right file."
         )
     elif run.category_mismatch:
         type_match = "mismatch"

@@ -634,6 +634,8 @@ export const api = {
       page: string
       title: string
       source_note: string
+      academic_year?: string
+      applicable_categories?: string
       verified: boolean
     },
   ) =>

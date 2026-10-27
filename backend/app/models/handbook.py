@@ -27,6 +27,10 @@ class HandbookReference(Base, TimestampMixin):
     page: Mapped[str] = mapped_column(String(32), default="", nullable=False)
     title: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     source_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Optional scope. Empty means "not limited to one year or application type".
+    # These never invent a clause — they only record what the administrator entered.
+    academic_year: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    applicable_categories: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     verified_by_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     verified_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)

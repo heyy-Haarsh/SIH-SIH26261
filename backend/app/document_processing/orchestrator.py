@@ -112,6 +112,10 @@ class ExtractionOrchestrator:
                 t0 = time.perf_counter()
                 if not self.ocr.available:
                     timings["ocr"] = int((time.perf_counter() - t0) * 1000)
+                    logger.warning(
+                        "ocr_unavailable_for_image %s",
+                        self.ocr.status.get("message") or "OCR unavailable",
+                    )
                     return ExtractionOutcome(
                         status=ExtractionRunStatus.OCR_UNAVAILABLE,
                         content_kind=inspect.content_kind,
@@ -189,6 +193,16 @@ class ExtractionOrchestrator:
 
         pages_with_text = sum(1 for p in pages if p.char_count >= MIN_TEXT_CHARS_PER_PAGE)
 
+        from app.document_processing.clarity import assess_upload
+
+        clarity_note = assess_upload(
+            content, inspect.content_kind, pages_with_text=pages_with_text
+        )
+        if clarity_note:
+            warnings.append(clarity_note)
+            if status == ExtractionRunStatus.COMPLETED:
+                status = ExtractionRunStatus.COMPLETED_WITH_WARNINGS
+
         t0 = time.perf_counter()
         field_cands = self.fields.extract_from_pages(pages, file_name=file_name)
 
@@ -252,6 +266,11 @@ class ExtractionOrchestrator:
 
         if needs_ocr_idx:
             if not self.ocr.available:
+                logger.warning(
+                    "ocr_unavailable_for_pdf pages=%s detail=%s",
+                    len(needs_ocr_idx),
+                    self.ocr.status.get("message") or "OCR unavailable",
+                )
                 if kind == DocumentContentKind.SCANNED_PDF or len(needs_ocr_idx) == len(pages):
                     status = ExtractionRunStatus.OCR_UNAVAILABLE
                     warnings.append(self.ocr.status.get("message") or "OCR unavailable for scanned pages.")
@@ -271,6 +290,12 @@ class ExtractionOrchestrator:
                         pages[i] = ocr_page
                         pages_ocr += 1
                     except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "ocr_page_failed page=%s error=%s",
+                            pages[i].page_number,
+                            exc.__class__.__name__,
+                            exc_info=exc,
+                        )
                         warnings.append(
                             f"OCR failed on page {pages[i].page_number}: {exc.__class__.__name__}"
                         )

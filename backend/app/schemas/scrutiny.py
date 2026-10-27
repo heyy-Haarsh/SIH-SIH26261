@@ -187,6 +187,8 @@ class HandbookReferenceIn(BaseModel):
     page: str = ""
     title: str = ""
     source_note: str = ""
+    academic_year: str = ""
+    applicable_categories: str = ""
     verified: bool = False
 
     @field_validator("reference_key")
@@ -206,6 +208,8 @@ class HandbookReferenceAdminOut(CamelModel):
     page: str
     title: str
     source_note: str
+    academic_year: str = ""
+    applicable_categories: str = ""
     verified: bool
     verified_by: str | None = None
     verified_at: datetime | None = None

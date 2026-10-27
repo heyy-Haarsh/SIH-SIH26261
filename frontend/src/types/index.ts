@@ -835,6 +835,8 @@ export interface HandbookReferenceAdmin {
   page: string
   title: string
   sourceNote: string
+  academicYear?: string
+  applicableCategories?: string
   verified: boolean
   verifiedBy?: string | null
   verifiedAt?: string | null

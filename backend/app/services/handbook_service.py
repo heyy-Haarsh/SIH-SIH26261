@@ -93,6 +93,8 @@ def _admin_out(ref: HandbookReference, db: Session) -> HandbookReferenceAdminOut
         page=ref.page,
         title=ref.title,
         source_note=ref.source_note,
+        academic_year=ref.academic_year or "",
+        applicable_categories=ref.applicable_categories or "",
         verified=bool(ref.verified and _is_complete(ref)),
         verified_by=verified_by,
         verified_at=ref.verified_at,
@@ -124,6 +126,8 @@ def upsert_reference(db: Session, user: User, payload: HandbookReferenceIn) -> H
     ref.edition, ref.section, ref.page = edition, section, page
     ref.title = payload.title.strip()
     ref.source_note = payload.source_note.strip()
+    ref.academic_year = payload.academic_year.strip()
+    ref.applicable_categories = payload.applicable_categories.strip()
     ref.verified = bool(payload.verified)
     ref.verified_by_id = user.id if payload.verified else None
     ref.verified_at = utcnow() if payload.verified else None

@@ -84,6 +84,15 @@ DEVANAGARI_KEYWORDS: dict[SemanticDocumentCategory, frozenset[str]] = {
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
+def _in_text(word: str, blob: str, tokens: Counter | set) -> bool:
+    """Match a keyword in text. Phrases and non-Latin words are substrings; English words are tokens."""
+    if " " in word or any(ord(ch) > 127 for ch in word):
+        return word in blob
+    if isinstance(tokens, Counter):
+        return tokens.get(word, 0) > 0
+    return word in tokens
+
+
 class SemanticDocumentClassifier:
     name = "semantic_classifier"
 
@@ -96,19 +105,29 @@ class SemanticDocumentClassifier:
     ) -> SemanticClassification:
         text_blob = " ".join(p.text for p in pages).lower()
         name_blob = file_name.lower()
-        tokens = Counter(_TOKEN.findall(text_blob + " " + name_blob))
+        content_tokens = Counter(_TOKEN.findall(text_blob))
+        name_tokens = set(_TOKEN.findall(name_blob))
 
-        scores: dict[SemanticDocumentCategory, int] = {}
+        content_scores: dict[SemanticDocumentCategory, int] = {}
+        name_scores: dict[SemanticDocumentCategory, int] = {}
         hit_details: dict[str, list[str]] = {}
         for cat, words in KEYWORDS.items():
-            hits = [w for w in words if tokens.get(w, 0) > 0 or w in name_blob]
+            content_hits = [w for w in words if _in_text(w, text_blob, content_tokens)]
+            name_hits = [w for w in words if _in_text(w, name_blob, name_tokens)]
             for dev_word in DEVANAGARI_KEYWORDS.get(cat, ()):
-                if dev_word in text_blob or dev_word in name_blob:
-                    hits.append(dev_word)
-            scores[cat] = len(hits)
-            if hits:
-                hit_details[cat.value] = hits
+                if dev_word in text_blob:
+                    content_hits.append(dev_word)
+                elif dev_word in name_blob:
+                    name_hits.append(dev_word)
+            content_scores[cat] = len(content_hits)
+            name_scores[cat] = len(name_hits)
+            if content_hits or name_hits:
+                hit_details[cat.value] = content_hits or name_hits
 
+        # The document text decides the type. The file name is only used when the text has
+        # no signal, and even then the result stays low-confidence so it goes to manual review.
+        using_filename = max(content_scores.values(), default=0) == 0
+        scores = name_scores if using_filename else content_scores
         best_score = max(scores.values(), default=0)
         if best_score == 0:
             return SemanticClassification(
@@ -130,18 +149,31 @@ class SemanticDocumentClassifier:
             )
 
         winner = winners[0]
-        # Confidence only when we have a clear score margin — still a heuristic, so keep modest
-        total_hits = sum(scores.values()) or 1
-        conf = round(best_score / total_hits, 3)
-        # Cap: keyword heuristics are weak signals
-        conf = min(conf, 0.75)
+        if using_filename:
+            confidence = 0.3
+            method = "keyword_heuristic_filename"
+            rationale = (
+                f"Only the file name suggests {winner.value}. "
+                "The document text does not confirm it, so this needs a manual check."
+            )
+        else:
+            # One clear content hit is enough to name a type; still capped because this is a
+            # keyword heuristic, not a measured classifier.
+            confidence = min(0.75, round(0.55 + 0.05 * (best_score - 1), 3))
+            method = "keyword_heuristic"
+            rationale = f"Document text suggests {winner.value}."
 
         return SemanticClassification(
             category=winner,
-            method="keyword_heuristic",
-            confidence=conf,
-            signals={"hits": hit_details.get(winner.value, []), "scores": {k.value: v for k, v in scores.items()}},
-            rationale=f"Keywords suggest {winner.value}.",
+            method=method,
+            confidence=confidence,
+            signals={
+                "hits": hit_details.get(winner.value, []),
+                "filename_only": using_filename,
+                "low_confidence": confidence < 0.5,
+                "scores": {k.value: v for k, v in scores.items() if v},
+            },
+            rationale=rationale,
         )
 
 

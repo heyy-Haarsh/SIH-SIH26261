@@ -19,6 +19,8 @@ interface Form {
   page: string
   title: string
   source_note: string
+  academic_year: string
+  applicable_categories: string
   verified: boolean
 }
 
@@ -29,6 +31,8 @@ const BLANK: Form = {
   page: '',
   title: '',
   source_note: '',
+  academic_year: '',
+  applicable_categories: '',
   verified: false,
 }
 
@@ -52,6 +56,8 @@ export function HandbookPage() {
       page: ref.page,
       title: ref.title,
       source_note: ref.sourceNote,
+      academic_year: ref.academicYear ?? '',
+      applicable_categories: ref.applicableCategories ?? '',
       verified: ref.verified,
     })
     setMsg(null)
@@ -135,6 +141,24 @@ export function HandbookPage() {
                 <Input value={form.page} onChange={(e) => setForm((f) => ({ ...f, page: e.target.value }))} />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Academic year (optional)</Label>
+                <Input
+                  value={form.academic_year}
+                  onChange={(e) => setForm((f) => ({ ...f, academic_year: e.target.value }))}
+                  placeholder="e.g. 2025-26"
+                />
+              </div>
+              <div>
+                <Label>Application types (optional)</Label>
+                <Input
+                  value={form.applicable_categories}
+                  onChange={(e) => setForm((f) => ({ ...f, applicable_categories: e.target.value }))}
+                  placeholder="e.g. NEW-ENG, EOA"
+                />
+              </div>
+            </div>
             <div>
               <Label>Title</Label>
               <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
@@ -192,6 +216,8 @@ export function HandbookPage() {
                       .filter(Boolean)
                       .join(' · ') || 'Incomplete'}
                     {ref.title ? ` — ${ref.title}` : ''}
+                    {ref.academicYear ? ` · ${ref.academicYear}` : ''}
+                    {ref.applicableCategories ? ` · ${ref.applicableCategories}` : ''}
                   </p>
                   {ref.verified && ref.verifiedBy && (
                     <p className="text-[11px] text-ink-muted">
