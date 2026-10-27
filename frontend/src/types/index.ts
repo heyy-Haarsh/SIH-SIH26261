@@ -654,6 +654,13 @@ export interface ApplicantApplication {
   officerDecisionReason?: string | null
   officerDecisionAt?: string | null
   corrections?: Array<{ documentName?: string; action: string; status?: string }>
+  officerUpdates?: Array<{
+    documentName?: string
+    issue: string
+    status: string
+    statusLabel?: string
+    note: string
+  }>
 }
 
 export interface ApplicantApplicationSummary {

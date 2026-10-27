@@ -8,7 +8,11 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Textarea } from '@/components/ui/Input'
 import { DocumentUploadControl } from '@/components/applicant/DocumentUploadControl'
-import { CorrectionTable, rowsFromOfficerText } from '@/components/shared/CorrectionTable'
+import {
+  CorrectionTable,
+  OfficerUpdateTable,
+  rowsFromOfficerText,
+} from '@/components/shared/CorrectionTable'
 import { useRole } from '@/app/RoleContext'
 import { useRefreshable } from '@/hooks/useRefreshable'
 import { useUploadPolicy } from '@/hooks/useUploadPolicy'
@@ -121,6 +125,7 @@ export function ApplicantDetailPage() {
 
         {(data.officerDecision ||
           (data.corrections && data.corrections.length > 0) ||
+          (data.officerUpdates && data.officerUpdates.length > 0) ||
           data.deficiencies.length > 0) && (
           <Card padding={false}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">
@@ -136,11 +141,26 @@ export function ApplicantDetailPage() {
                 </Badge>
               )}
             </div>
-            <div className="p-5">
-              <CorrectionTable
-                rows={data.corrections ?? []}
-                empty="No outstanding corrections from the officer."
-              />
+            <div className="space-y-4 p-5">
+              {(data.corrections?.length ?? 0) > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                    What you must correct
+                  </h3>
+                  <CorrectionTable rows={data.corrections ?? []} />
+                </div>
+              )}
+              {(data.officerUpdates?.length ?? 0) > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                    Officer decisions on issues
+                  </h3>
+                  <OfficerUpdateTable rows={data.officerUpdates ?? []} />
+                </div>
+              )}
+              {(data.corrections?.length ?? 0) === 0 && (data.officerUpdates?.length ?? 0) === 0 && (
+                <p className="text-xs text-ink-muted">No outstanding corrections from the officer.</p>
+              )}
             </div>
           </Card>
         )}

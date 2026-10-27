@@ -93,3 +93,50 @@ export function CorrectionTable({
     </div>
   )
 }
+
+export function OfficerUpdateTable({
+  rows,
+  empty = 'No officer updates yet.',
+}: {
+  rows: Array<{
+    documentName?: string | null
+    issue: string
+    status: string
+    statusLabel?: string | null
+    note: string
+  }>
+  empty?: string
+}) {
+  if (rows.length === 0) {
+    return <p className="text-xs text-ink-muted">{empty}</p>
+  }
+  return (
+    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
+      <table className="w-full min-w-[560px] text-left text-sm">
+        <thead>
+          <tr className="border-b border-border bg-surface text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+            <th className="px-3 py-2">Document</th>
+            <th className="px-3 py-2">Issue</th>
+            <th className="px-3 py-2">Officer decision</th>
+            <th className="px-3 py-2">Officer note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={`${row.issue}-${i}`} className="border-b border-border last:border-0 align-top">
+              <td className="px-3 py-2.5 font-medium text-ink">{row.documentName || 'Application'}</td>
+              <td className="px-3 py-2.5 text-ink-secondary">{row.issue}</td>
+              <td className="px-3 py-2.5 capitalize text-ink">{row.status}</td>
+              <td className="px-3 py-2.5 text-ink-secondary">
+                <div>{row.note}</div>
+                {row.statusLabel && (
+                  <div className="mt-1 text-[11px] text-ink-muted">{row.statusLabel}</div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

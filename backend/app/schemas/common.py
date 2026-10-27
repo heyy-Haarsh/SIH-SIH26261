@@ -464,6 +464,8 @@ class ApplicantApplicationOut(CamelModel):
     officer_decision_reason: str | None = None
     officer_decision_at: datetime | None = None
     corrections: list[dict] = Field(default_factory=list)
+    # Closed issues the officer marked with a note (resolved / waived / accepted).
+    officer_updates: list[dict] = Field(default_factory=list)
 
 
 class ApplicantApplicationSummaryOut(CamelModel):

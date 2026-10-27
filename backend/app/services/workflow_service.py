@@ -471,8 +471,12 @@ def resolve_finding(
         raise NotFoundError("Finding not found")
     app = _get_app(db, finding.application_id)
     _ensure_officer_may_act(app, user, action="resolve findings")
-    # Preserve original severity/outcome; only status changes
+    # Preserve original severity/outcome; only status + officer note change.
+    # waived = still on record, not blocking this stage; resolved = fixed after check;
+    # accepted = officer accepts the finding as recorded without requiring a re-upload.
     finding.status = status
+    finding.resolution_reason = reason
+    finding.resolved_at = utcnow()
     record_audit(
         db,
         action="workflow.finding_resolved",

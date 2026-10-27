@@ -79,6 +79,9 @@ class Finding(Base):
         enum_type(FindingStatus), default=FindingStatus.OPEN, nullable=False
     )
     outcome: Mapped[ValidationOutcome] = mapped_column(enum_type(ValidationOutcome), nullable=False)
+    # Officer note when resolved / waived / accepted (also shown to the applicant).
+    resolution_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
     validation_run: Mapped[ValidationRun] = relationship(back_populates="findings")

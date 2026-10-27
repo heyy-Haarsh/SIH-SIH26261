@@ -107,13 +107,20 @@ def test_resolution_carries_over_only_for_the_same_document_version(client):
     res = client.post(
         f"/api/v1/findings/{target['id']}/resolve",
         headers=OFFICER,
-        json={"status": "accepted", "reason": "Officer saw the original; it is current."},
+        json={"status": "waived", "reason": "Officer saw the original; it is current."},
     )
     assert res.status_code == 200, res.text
+    assert res.json()["status"] == "waived"
+
+    mine = client.get(f"/api/v1/applicant/applications/{app_id}", headers=APPLICANT)
+    assert mine.status_code == 200
+    updates = mine.json().get("officerUpdates") or []
+    assert any("Officer saw the original" in (u.get("note") or "") for u in updates)
+    assert any(u.get("status") == "waived" for u in updates)
 
     _revalidate(client, app_id)  # same file -> resolution is kept
     again = next(f for f in _detail(client, app_id)["findings"] if "expired" in f["title"].lower())
-    assert again["status"] == "accepted"
+    assert again["status"] == "waived"
 
     # the applicant replaces the file: the old resolution must not hide the new file's issue
     _upload(client, app_id, "AFFIDAVIT", b"Institution Name: Alpha College v2\n", "expired_affidavit.txt")

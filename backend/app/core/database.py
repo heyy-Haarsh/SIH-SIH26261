@@ -109,6 +109,8 @@ def init_db() -> None:
 _ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("applications", "institution_name", "VARCHAR(255) NOT NULL DEFAULT ''"),
     ("findings", "fingerprint", "VARCHAR(64) NOT NULL DEFAULT ''"),
+    ("findings", "resolution_reason", "TEXT"),
+    ("findings", "resolved_at", "DATETIME"),
     ("handbook_references", "academic_year", "VARCHAR(32) NOT NULL DEFAULT ''"),
     ("handbook_references", "applicable_categories", "VARCHAR(255) NOT NULL DEFAULT ''"),
 )

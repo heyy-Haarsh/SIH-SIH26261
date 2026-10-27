@@ -1,8 +1,9 @@
 """Applicant-facing application view.
 
 Deliberately narrow: applications, required documents, upload status, clarifications
-(deficiencies) and history. It never includes extracted fields, internal priority scores,
-forensic indicators, rule codes, verification run codes or officer notes.
+(deficiencies), final decisions, and officer resolution notes the applicant should see.
+It never includes extracted fields, internal priority scores, forensic indicators,
+rule codes or verification run codes.
 """
 
 from __future__ import annotations
@@ -16,9 +17,11 @@ from app.core.security import ensure_application_access
 from app.core.seed import DEFAULT_DOCS
 from app.models.application import Application
 from app.models.audit import AuditEvent
+from app.models.doc_verification import DocumentVerificationCheck
 from app.models.enums import ApplicationStatus, DeficiencyStatus, ReviewDecisionType, UserRole
 from app.models.review import DeficiencyNotice, ReviewDecision
 from app.models.user import User
+from app.services import findings_service
 from app.schemas.common import (
     ApplicantApplicationOut,
     ApplicantApplicationSummaryOut,
@@ -275,6 +278,69 @@ def _correction_rows(notices: list[ApplicantDeficiencyOut], decision: ReviewDeci
     return rows
 
 
+_STATUS_PLAIN = {
+    "resolved": "Resolved — no further action needed on this item",
+    "waived": "Waived — the officer is not requiring a correction for this stage",
+    "accepted": "Accepted — the officer accepted the finding as recorded",
+}
+
+
+def _doc_label(app: Application, document_id: str | None) -> str:
+    if not document_id:
+        return "Application"
+    docs = {d.id: d for d in app.documents}
+    doc = docs.get(document_id)
+    if doc is None:
+        return "Document"
+    names = {r["code"]: r["name"] for r in _required_defs(app)}
+    return names.get(doc.requirement_code) or doc.file_name or doc.requirement_code
+
+
+def _officer_updates(db: Session, app: Application) -> list[dict]:
+    """Closed findings/checks with an officer note, safe for the applicant to read."""
+    rows: list[dict] = []
+    for finding in findings_service.current_findings(db, app.id):
+        status = finding.status.value if hasattr(finding.status, "value") else str(finding.status)
+        if status not in ("resolved", "waived", "accepted"):
+            continue
+        note = (finding.resolution_reason or "").strip()
+        if len(note) < 5:
+            continue
+        rows.append(
+            {
+                "documentName": _doc_label(app, finding.document_id),
+                "issue": finding.title,
+                "status": status,
+                "statusLabel": _STATUS_PLAIN.get(status, status),
+                "note": note,
+            }
+        )
+    checks = (
+        db.query(DocumentVerificationCheck)
+        .filter(
+            DocumentVerificationCheck.application_id == app.id,
+            DocumentVerificationCheck.status.in_(["resolved", "waived", "accepted"]),
+        )
+        .order_by(DocumentVerificationCheck.resolved_at.desc())
+        .limit(40)
+        .all()
+    )
+    for check in checks:
+        note = (check.resolution_reason or "").strip()
+        if len(note) < 5:
+            continue
+        rows.append(
+            {
+                "documentName": _doc_label(app, check.document_id),
+                "issue": check.title,
+                "status": check.status,
+                "statusLabel": _STATUS_PLAIN.get(check.status, check.status),
+                "note": note,
+            }
+        )
+    return rows[:30]
+
+
 def _counts(rows: list[ApplicantRequirementOut]) -> tuple[int, int]:
     mandatory = [r for r in rows if r.mandatory]
     return len(mandatory), sum(1 for r in mandatory if r.document is not None)
@@ -319,6 +385,7 @@ def get_applicant_application(db: Session, user: User, application_id: str) -> A
         officer_decision_reason=_short_reason(decision.content if decision else None),
         officer_decision_at=decision.created_at if decision else None,
         corrections=_correction_rows(notices, decision),
+        officer_updates=_officer_updates(db, app),
     )
 
 
