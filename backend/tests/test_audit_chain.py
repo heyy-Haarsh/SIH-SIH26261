@@ -12,7 +12,7 @@ def test_chain_integrity_and_tamper(client):
                 db,
                 action=f"test.event.{i}",
                 actor_id="u1",
-                actor_role="admin",
+                actor_role="regional_officer",
                 mode="SIMULATED",
                 result_summary={"i": i},
             )

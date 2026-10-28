@@ -27,7 +27,7 @@ router = APIRouter(tags=["reconciliation"])
 def start_reconciliation(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -53,7 +53,7 @@ def start_reconciliation(
 def latest_reconciliation(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -72,7 +72,7 @@ def latest_reconciliation(
 def list_reconciliation_items(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:

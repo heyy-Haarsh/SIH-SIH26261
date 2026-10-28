@@ -57,11 +57,11 @@ export function DocumentReportPanel({ role, applicationId, documentId, onClose, 
         className="flex h-full w-full max-w-6xl flex-col bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-3">
+        <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-2.5">
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-ink">{doc?.name ?? 'Document'}</h2>
+            <h2 className="truncate text-sm font-semibold text-ink">{doc?.name ?? 'Document'}</h2>
             {doc && (
-              <p className="truncate text-xs text-ink-muted">
+              <p className="truncate text-[11px] text-ink-muted">
                 {doc.fileName} · v{doc.version} · {formatBytes(doc.sizeBytes)} · uploaded{' '}
                 {formatDateTime(doc.uploadedAt)}
               </p>
@@ -72,7 +72,7 @@ export function DocumentReportPanel({ role, applicationId, documentId, onClose, 
           </Button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-4">
           {loading && <p className="text-sm text-ink-muted">Loading report…</p>}
           {error && !data && (
             <p className="text-sm text-status-failed" role="alert">
@@ -80,7 +80,7 @@ export function DocumentReportPanel({ role, applicationId, documentId, onClose, 
             </p>
           )}
           {data && doc && (
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
               <div className="space-y-4">
                 <section>
                   <h3 className="mb-2 text-sm font-semibold text-ink">Document preview</h3>
@@ -223,11 +223,11 @@ function StageCard({
           <Badge tone={STAGE_TONE[stage.status]}>{STAGE_LABEL[stage.status]}</Badge>
         </span>
       </button>
-      <p className="px-3 pb-2 text-xs text-ink-secondary">{stage.summary}</p>
+      <p className="px-3 pb-1.5 text-[11px] text-ink-muted">{stage.summary}</p>
       {open && (
-        <div className="space-y-3 border-t border-border px-3 py-3">
+        <div className="space-y-2 border-t border-border px-3 py-2.5">
           {stage.details.length > 0 && (
-            <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+            <dl className="grid gap-x-3 gap-y-0.5 text-xs sm:grid-cols-2">
               {stage.details.map((d) => (
                 <div key={d.label} className="flex gap-2">
                   <dt className="shrink-0 text-ink-muted">{d.label}:</dt>
@@ -239,7 +239,7 @@ function StageCard({
           {stage.checks.length === 0 && (
             <p className="text-xs text-ink-muted">No checks recorded at this stage.</p>
           )}
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {stage.checks.map((c) => (
               <CheckRow
                 key={c.id}
@@ -272,7 +272,8 @@ function CheckRow({
   onChanged: () => Promise<unknown>
 }) {
   const passed = check.status === 'passed'
-  const canResolve = check.resolvable && (role === 'officer' || role === 'admin')
+  const canResolve = check.resolvable && (role === 'officer' || role === 'regional_officer')
+  const [showResolve, setShowResolve] = useState(false)
 
   async function resolve(status: Resolution, reason: string) {
     const body = { status, reason }
@@ -283,6 +284,7 @@ function CheckRow({
       await api.resolveForensicsIndicator(role, check.id, body)
     else await api.resolveDocVerificationCheck(role, check.id, body)
     await onChanged()
+    setShowResolve(false)
   }
 
   return (
@@ -291,7 +293,7 @@ function CheckRow({
         passed ? 'border-l-emerald-400' : SEVERITY_BAR[check.severity]
       }`}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className="font-medium text-ink">{check.title}</span>
         {passed ? (
           <Badge tone="pass">Passed</Badge>
@@ -302,19 +304,34 @@ function CheckRow({
         {check.mode && <Badge tone={check.mode === 'real' ? 'pass' : 'neutral'}>{MODE_LABEL[check.mode]}</Badge>}
         {check.source && <span className="text-[10px] text-ink-muted">{check.source}</span>}
       </div>
-      {check.detail && <p className="mt-1 text-ink-secondary">{check.detail}</p>}
-      {check.resolutionReason && (
-        <p className="mt-1 text-[11px] text-ink-muted">Officer note: {check.resolutionReason}</p>
-      )}
-      {check.limitations.length > 0 && (
-        <p className="mt-1 text-[11px] text-ink-muted">Limitation: {check.limitations.join(' · ')}</p>
-      )}
-      {check.handbook && !passed && (
-        <div className="mt-1">
-          <HandbookBadge reference={check.handbook} />
+      {check.detail && <p className="mt-0.5 text-ink-secondary">{check.detail}</p>}
+      {(check.resolutionReason || check.limitations.length > 0 || (check.handbook && !passed)) && (
+        <div className="mt-1 space-y-0.5">
+          {check.resolutionReason && (
+            <p className="text-[11px] text-ink-muted">Officer note: {check.resolutionReason}</p>
+          )}
+          {check.limitations.length > 0 && (
+            <p className="text-[11px] text-ink-muted">Limitation: {check.limitations.join(' · ')}</p>
+          )}
+          {check.handbook && !passed && (
+            <div>
+              <HandbookBadge reference={check.handbook} />
+            </div>
+          )}
         </div>
       )}
-      {canResolve && <ResolveControl role={role} onResolve={resolve} />}
+      {canResolve && !showResolve && (
+        <button
+          type="button"
+          className="mt-1.5 text-[11px] font-medium text-accent underline-offset-2 hover:underline"
+          onClick={() => setShowResolve(true)}
+        >
+          Resolve…
+        </button>
+      )}
+      {canResolve && showResolve && (
+        <ResolveControl role={role} onResolve={resolve} />
+      )}
     </li>
   )
 }

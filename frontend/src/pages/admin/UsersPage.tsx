@@ -42,7 +42,7 @@ export function UsersPage() {
   }, [role])
 
   return (
-    <AppShell title="Users & Roles" breadcrumbs={['Administrator', 'Users']}>
+    <AppShell title="Users & Roles" breadcrumbs={['Regional Officer', 'Users']}>
       <DemoBanner>
         Create and deactivate demo users. Applicants require an institution. Destructive actions ask
         for confirmation and are audited.
@@ -61,7 +61,7 @@ export function UsersPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
-          <CardHeader title="Add user" description="Roles: applicant, officer, admin" />
+          <CardHeader title="Add user" description="Roles: applicant, officer, regional_officer" />
           <div className="space-y-3">
             <div>
               <Label>Name</Label>
@@ -86,7 +86,7 @@ export function UsersPage() {
               >
                 <option value="applicant">applicant</option>
                 <option value="officer">officer</option>
-                <option value="admin">admin</option>
+                <option value="regional_officer">regional_officer</option>
               </Select>
             </div>
             {form.role === 'applicant' && (

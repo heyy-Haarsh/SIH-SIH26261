@@ -23,7 +23,7 @@ router = APIRouter(tags=["forensics"])
 def start_forensics(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -50,7 +50,7 @@ def start_forensics(
 def latest_forensics(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -69,7 +69,7 @@ def latest_forensics(
 def list_forensics_indicators(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:

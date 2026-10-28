@@ -68,7 +68,7 @@ def get_upload_policy(_: User = Depends(get_current_user)):
 @router.get("/metrics")
 def application_metrics(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     """Counts for the officer/admin dashboards, from the same stage model as every list."""
     return application_metrics_service.application_metrics(db)
@@ -77,7 +77,7 @@ def application_metrics(
 @router.get("", response_model=list[ApplicationSummaryOut])
 def list_applications(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     return application_service.list_applications(db, user)
 
@@ -104,7 +104,7 @@ def create_application(
 def get_application(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     return application_service.get_application(db, user, application_id)
 
@@ -131,7 +131,7 @@ async def upload_document(
 def create_validation_run(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -153,7 +153,7 @@ def create_validation_run(
 def get_application_report_json(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:
@@ -169,7 +169,7 @@ def get_application_report_json(
 def get_application_report_pdf(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     app = db.query(Application).filter(Application.id == application_id).first()
     if not app:

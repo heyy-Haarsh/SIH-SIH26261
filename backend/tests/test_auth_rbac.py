@@ -20,7 +20,7 @@ def test_applicant_cannot_list_admin_users(client):
 
 
 def test_admin_can_list_users(client):
-    res = client.get("/api/v1/admin/users", headers=auth_headers("admin"))
+    res = client.get("/api/v1/admin/users", headers=auth_headers("regional_officer"))
     assert res.status_code == 200
     assert isinstance(res.json(), list)
     assert len(res.json()) >= 3

@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Download, FileText, Info, Plug } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
-import { DemoBanner } from '@/components/dashboard/DemoBanner'
-import { Card, CardHeader } from '@/components/ui/Card'
+import { Card } from '@/components/ui/Card'
 import { Tabs } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -15,7 +14,6 @@ import { DocumentReportPanel } from '@/components/scrutiny/DocumentReportPanel'
 import { IssuesPanel } from '@/components/scrutiny/IssuesPanel'
 import { ReconciliationPanel } from '@/components/scrutiny/ReconciliationPanel'
 import { errorText } from '@/components/scrutiny/scrutinyUi'
-import { CorrectionTable, rowsFromOfficerText } from '@/components/shared/CorrectionTable'
 import { formatDate } from '@/lib/format'
 import { useRole } from '@/app/RoleContext'
 import { useApplicationDetail } from '@/hooks/useApplicationDetail'
@@ -23,11 +21,11 @@ import { useRefreshable } from '@/hooks/useRefreshable'
 import { api } from '@/services/api'
 import type { ScrutinyReview } from '@/types'
 
-/** Scrutiny officer / administrator view of one application. Applicants have their own page. */
+/** Scrutiny officer / regional officer view of one application. Applicants have their own page. */
 export function ApplicationDetailPage() {
   const { id } = useParams()
   const { role } = useRole()
-  const staff = role === 'officer' || role === 'admin'
+  const staff = role === 'officer' || role === 'regional_officer'
   const { detail, source, loading, error, reload } = useApplicationDetail(staff ? id : undefined)
   const review = useRefreshable<ScrutinyReview>(
     staff && id && source === 'api' ? () => api.getScrutinyReview(role, id) : null,
@@ -36,6 +34,7 @@ export function ApplicationDetailPage() {
   const [tab, setTab] = useState('issues')
   const [openDocId, setOpenDocId] = useState<string | null>(null)
   const [workflowMsg, setWorkflowMsg] = useState<string | null>(null)
+  const [workflowErr, setWorkflowErr] = useState(false)
   const [busy, setBusy] = useState(false)
   const pickedInitialTab = useRef<string | null>(null)
 
@@ -44,14 +43,14 @@ export function ApplicationDetailPage() {
     await Promise.all([reload(), reloadReview()])
   }, [reload, reloadReview])
 
-  // Land on the decision tab once when the application is waiting on a clarification.
   useEffect(() => {
     if (!detail || pickedInitialTab.current === detail.id) return
     pickedInitialTab.current = detail.id
     if (detail.status === 'clarification_required' || detail.status === 'resubmitted') setTab('review')
   }, [detail])
 
-  const roleLabel = role === 'officer' ? 'Scrutiny Officer' : role === 'admin' ? 'Administrator' : 'Applicant'
+  const roleLabel =
+    role === 'officer' ? 'Scrutiny Officer' : role === 'regional_officer' ? 'Regional Officer' : 'Applicant'
 
   if (!staff) {
     return (
@@ -103,16 +102,19 @@ export function ApplicationDetailPage() {
       i.riskClass === 'authenticity_concern' ||
       i.riskClass === 'possible_duplicate',
   ).length
+  const canStart = ['submitted', 'processing', 'resubmitted'].includes(detail.status)
 
   async function startScrutiny() {
     setBusy(true)
     setWorkflowMsg(null)
+    setWorkflowErr(false)
     try {
       await api.startScrutiny(role, detail!.id)
       setWorkflowMsg('Scrutiny started.')
       await refreshAll()
     } catch (err) {
       setWorkflowMsg(errorText(err, 'Could not start scrutiny'))
+      setWorkflowErr(true)
     } finally {
       setBusy(false)
     }
@@ -121,14 +123,14 @@ export function ApplicationDetailPage() {
   async function checkIssuers() {
     setBusy(true)
     setWorkflowMsg(null)
+    setWorkflowErr(false)
     try {
       await api.runApplicationDocVerification(role, detail!.id)
-      setWorkflowMsg(
-        'Issuer check finished. Results are from the local demo issuer — not an official authority.',
-      )
+      setWorkflowMsg('Issuer check finished. Results are from the local demo issuer — not an official authority.')
       await refreshAll()
     } catch (err) {
       setWorkflowMsg(errorText(err, 'Issuer check failed. Is the simulated issuer running on port 8001?'))
+      setWorkflowErr(true)
     } finally {
       setBusy(false)
     }
@@ -137,6 +139,7 @@ export function ApplicationDetailPage() {
   async function downloadPdf() {
     setBusy(true)
     setWorkflowMsg(null)
+    setWorkflowErr(false)
     try {
       const { blob, fileName } = await api.downloadScrutinyPdf(role, detail!.id)
       const url = URL.createObjectURL(blob)
@@ -149,125 +152,117 @@ export function ApplicationDetailPage() {
       URL.revokeObjectURL(url)
     } catch (err) {
       setWorkflowMsg(errorText(err, 'Could not generate the PDF report'))
+      setWorkflowErr(true)
     } finally {
       setBusy(false)
     }
   }
 
-  const canStart = ['submitted', 'processing', 'resubmitted'].includes(detail.status)
-
   return (
     <AppShell
       title={detail.applicationNumber}
       breadcrumbs={[roleLabel, 'Applications', detail.applicationNumber]}
-      actions={
-        <>
-          {source === 'api' && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Plug size={14} />}
-                disabled={busy}
-                onClick={() => void checkIssuers()}
-              >
-                Check with issuer
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Download size={14} />}
-                disabled={busy}
-                onClick={() => void downloadPdf()}
-              >
-                Download PDF report
-              </Button>
-            </>
-          )}
-          {canStart && (
-            <Button size="sm" disabled={busy} onClick={() => void startScrutiny()}>
-              Start scrutiny
-            </Button>
-          )}
-        </>
-      }
     >
-      {source !== 'api' && (
-        <DemoBanner>
-          Synthetic demo data. Open an application created through the API to use the full scrutiny
-          review.
-        </DemoBanner>
-      )}
-      {workflowMsg && (
-        <div
-          role="status"
-          className="mb-4 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-xs text-ink-secondary"
-        >
-          {workflowMsg}
-        </div>
-      )}
+      {/* ── Compact application header ───────────────────────────────── */}
+      <div className="mb-3 overflow-hidden rounded-[var(--radius-lg)] border border-border bg-white shadow-[var(--shadow-card)]">
 
-      <div className="mb-5 grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold text-ink">{detail.institutionName}</h2>
-                <ApplicationStatusBadge status={detail.status} />
-                <PriorityBadge priority={detail.priority} />
-              </div>
-              <p className="mt-1 text-sm text-ink-secondary">
-                {detail.category} · {detail.programName} · AY {detail.academicYear}
-              </p>
+        {/* Demo / synthetic data notice — slim top strip */}
+        {source !== 'api' && (
+          <div className="flex items-center gap-2 border-b border-sky-100 bg-status-info-bg px-4 py-1.5 text-[11px] text-status-info">
+            <Info size={12} className="shrink-0" />
+            <span>Synthetic demo data — open an application created via the API for a live scrutiny review.</span>
+          </div>
+        )}
+
+        {/* Main header row */}
+        <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3 pb-2">
+          {/* Left: institution + badges */}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-bold text-ink">{detail.institutionName}</h2>
+              <ApplicationStatusBadge status={detail.status} />
+              <PriorityBadge priority={detail.priority} />
+              {typeof detail.priorityScore === 'number' && (
+                <span
+                  className="inline-flex items-center gap-1 rounded border border-border bg-surface px-2 py-0.5 text-xs font-semibold text-ink"
+                  title="Priority score — ordering aid only, not proof of fraud or compliance"
+                >
+                  <span className="font-normal text-ink-muted">Score</span>
+                  {detail.priorityScore}
+                </span>
+              )}
             </div>
-            {typeof detail.priorityScore === 'number' && (
-              <div className="rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-right">
-                <div className="text-[10px] uppercase tracking-wide text-ink-muted">Priority aid</div>
-                <div className="text-xl font-semibold text-ink">{detail.priorityScore}</div>
-                <div className="max-w-[150px] text-[10px] text-ink-muted">
-                  Ordering aid only — not proof of fraud or compliance
-                </div>
-              </div>
-            )}
+            <p className="mt-0.5 text-xs text-ink-secondary">
+              {detail.category} · {detail.programName} · AY {detail.academicYear}
+            </p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">
+              #{detail.applicationNumber} · Submitted {formatDate(detail.submittedAt)} · Officer: {detail.assignedOfficer ?? 'Unassigned'} · {detail.contactEmail}
+            </p>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-4">
-            <Meta label="Application" value={detail.applicationNumber} />
-            <Meta label="Submitted" value={formatDate(detail.submittedAt)} />
-            <Meta label="Officer" value={detail.assignedOfficer ?? 'Unassigned'} />
-            <Meta label="Contact" value={detail.contactEmail} />
-          </div>
-        </Card>
 
-        <Card>
-          <CardHeader title="Where this stands" description="Latest validation run" />
-          <dl className="space-y-2 text-sm">
-            <Row label="Status" value={detail.status.replace(/_/g, ' ')} />
-            <Row label="Open issues" value={data ? String(data.openIssueCount) : '—'} />
-            <Row label="Documents" value={`${detail.documents.length} uploaded`} />
-            <Row
-              label="Not uploaded"
-              value={data ? String(data.missingDocuments.length) : '—'}
-            />
-            {detail.lastTransitionNote && (
-              <div className="border-b border-border pb-2 last:border-0">
-                <dt className="mb-2 text-ink-muted">Last note</dt>
-                <dd>
-                  <CorrectionTable
-                    rows={rowsFromOfficerText(detail.lastTransitionNote)}
-                    empty={detail.lastTransitionNote.split('\n')[0]}
-                  />
-                </dd>
-              </div>
+          {/* Right: action buttons */}
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {source === 'api' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Plug size={13} />}
+                  disabled={busy}
+                  onClick={() => void checkIssuers()}
+                >
+                  Check issuers
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Download size={13} />}
+                  disabled={busy}
+                  onClick={() => void downloadPdf()}
+                >
+                  PDF report
+                </Button>
+              </>
             )}
-          </dl>
-          <p className="mt-3 flex items-start gap-1.5 text-[11px] text-ink-muted">
-            <Info size={12} className="mt-0.5 shrink-0" />
-            {data?.disclaimer ??
-              'Automated results support the officer; they never decide an application.'}
-          </p>
-        </Card>
+            {canStart && (
+              <Button size="sm" disabled={busy} onClick={() => void startScrutiny()}>
+                Start scrutiny
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Status snapshot row — inline chips */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border bg-surface px-4 py-2 text-xs">
+          <StatusChip label="Status" value={detail.status.replace(/_/g, ' ')} />
+          <StatusChip label="Open issues" value={data ? String(data.openIssueCount) : '—'} highlight={data ? data.openIssueCount > 0 : false} />
+          <StatusChip label="Uploaded" value={`${detail.documents.length} doc${detail.documents.length !== 1 ? 's' : ''}`} />
+          <StatusChip label="Missing" value={data ? String(data.missingDocuments.length) : '—'} highlight={data ? data.missingDocuments.length > 0 : false} />
+          {detail.lastTransitionNote && (
+            <span className="ml-auto text-[11px] text-ink-muted">
+              <span className="font-medium">Last note: </span>
+              {detail.lastTransitionNote.split('\n')[0].slice(0, 80)}
+              {detail.lastTransitionNote.length > 80 ? '…' : ''}
+            </span>
+          )}
+        </div>
+
+        {/* Workflow feedback — only shown when something happened */}
+        {workflowMsg && (
+          <div
+            role="status"
+            className={`border-t px-4 py-1.5 text-xs ${
+              workflowErr
+                ? 'border-red-100 bg-status-failed-bg text-status-failed'
+                : 'border-border bg-surface text-ink-secondary'
+            }`}
+          >
+            {workflowMsg}
+          </div>
+        )}
       </div>
 
+      {/* ── Tabs + content ───────────────────────────────────────────── */}
       <Card padding={false}>
         <div className="px-4 pt-2">
           <Tabs
@@ -287,7 +282,7 @@ export function ApplicationDetailPage() {
           />
         </div>
 
-        <div className="p-4 md:p-5">
+        <div className="p-4">
           {review.error && !data && source === 'api' && (
             <p className="mb-3 text-xs text-status-failed" role="alert">
               {review.error}
@@ -354,20 +349,12 @@ export function ApplicationDetailPage() {
   )
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+/** Inline status chip used in the header snapshot row. */
+function StatusChip({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className="rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-ink-muted">{label}</div>
-      <div className="mt-0.5 truncate text-sm font-medium text-ink">{value}</div>
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-3 border-b border-border pb-2 last:border-0">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="text-right font-medium text-ink">{value}</dd>
-    </div>
+    <span className="flex items-center gap-1">
+      <span className="text-ink-muted">{label}:</span>
+      <span className={`font-medium ${highlight ? 'text-status-failed' : 'text-ink'}`}>{value}</span>
+    </span>
   )
 }

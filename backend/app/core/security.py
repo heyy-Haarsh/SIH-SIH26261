@@ -30,16 +30,23 @@ from app.models.enums import UserRole
 DEMO_USER_ALIASES: dict[str, str] = {
     "demo-applicant": "usr-app-001",
     "demo-officer": "usr-off-001",
-    "demo-admin": "usr-adm-001",
+    "demo-officer-2": "usr-off-002",
+    "demo-admin": "usr-adm-001",  # legacy alias
+    "demo-regional-officer": "usr-adm-001",
+    "demo-regional_officer": "usr-adm-001",  # auth_headers("regional_officer")
 }
 
 
 def _parse_role(raw: str) -> UserRole:
+    value = raw.strip().lower()
+    if value == "admin":  # legacy demo header / stored role
+        value = "regional_officer"
     try:
-        return UserRole(raw.strip().lower())
+        return UserRole(value)
     except ValueError:
         raise UnauthorizedError(
-            "Invalid X-Demo-Role. Allowed roles: applicant, officer, admin.", code="invalid_role"
+            "Invalid X-Demo-Role. Allowed roles: applicant, officer, regional_officer.",
+            code="invalid_role",
         ) from None
 
 
@@ -94,15 +101,15 @@ def require_roles(*roles: UserRole) -> Callable[..., User]:
 
 require_applicant = require_roles(UserRole.APPLICANT)
 require_officer = require_roles(UserRole.OFFICER)
-require_admin = require_roles(UserRole.ADMIN)
+require_admin = require_roles(UserRole.REGIONAL_OFFICER)
 require_applicant_or_officer = require_roles(UserRole.APPLICANT, UserRole.OFFICER)
-require_officer_or_admin = require_roles(UserRole.OFFICER, UserRole.ADMIN)
-require_any_role = require_roles(UserRole.APPLICANT, UserRole.OFFICER, UserRole.ADMIN)
+require_officer_or_admin = require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)
+require_any_role = require_roles(UserRole.APPLICANT, UserRole.OFFICER, UserRole.REGIONAL_OFFICER)
 
 
 def can_access_application(user: User, application: Application) -> bool:
     """Read access: applicants only for their own institution; officers and admins for all."""
-    if user.role in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         return True
     if user.role == UserRole.APPLICANT:
         return user.institution_id is not None and user.institution_id == application.institution_id

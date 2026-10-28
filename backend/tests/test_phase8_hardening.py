@@ -166,7 +166,7 @@ def test_concurrent_officer_blocked_on_clarification(client):
 
     created = client.post(
         "/api/v1/admin/users",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "name": "Other Officer",
             "email": "other.officer@praman.local",

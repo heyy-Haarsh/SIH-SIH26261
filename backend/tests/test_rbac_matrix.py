@@ -16,7 +16,7 @@ from app.models.enums import UserRole
 from app.models.user import Institution, User
 from tests.conftest import auth_headers
 
-A, O, ADM = "applicant", "officer", "admin"
+A, O, ADM = "applicant", "officer", "regional_officer"
 STAFF = {O, ADM}
 ANY = {A, O, ADM}
 PUBLIC = "public"
@@ -37,7 +37,9 @@ POLICY: dict[tuple[str, str], object] = {
     ("GET", "/applications/{application_id}/deficiencies"): ANY,
     ("GET", "/deficiencies"): ANY,
     ("GET", "/documents/{document_id}/file"): ANY,
-    # --- officer / admin: internal scrutiny data (never shown to applicants).`n    # Decisions and resolutions are officer-only: an administrator configures the system but`n    # does not decide applications (separation of duties).
+    # --- officer / regional officer: internal scrutiny data (never shown to applicants).
+    # Decisions and resolutions are officer-only: the regional officer configures the system
+    # but does not decide applications (separation of duties).
     ("GET", "/applications"): STAFF,
     ("GET", "/applications/metrics"): STAFF,
     ("GET", "/applications/{application_id}"): STAFF,

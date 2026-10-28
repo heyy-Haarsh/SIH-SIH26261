@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     sarvam_stt_model: str = "saaras:v4"
     sarvam_realtime_ws_url: str = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
     sarvam_realtime_model: str = "saaras:v3-realtime"
+
+    # Regional Officer → Scrutiny Officer auto-assignment on application submit
+    auto_delegate: bool = True
     enable_ai_extraction: bool = False
     aicte_api_base_url: str = ""
     aicte_api_key: str = ""

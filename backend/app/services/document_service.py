@@ -53,7 +53,7 @@ def upload_document(
     file: UploadFile,
     requirement_code: str,
 ) -> UploadResultOut:
-    if user.role not in (UserRole.APPLICANT, UserRole.ADMIN):
+    if user.role not in (UserRole.APPLICANT, UserRole.REGIONAL_OFFICER):
         raise HTTPException(
             status_code=403, detail="Only applicants can upload documents in demo flow"
         )

@@ -8,7 +8,7 @@ import { RoleProvider } from '@/app/RoleContext'
 import { RequireRole } from '@/app/RequireRole'
 import type { UserRole } from '@/types'
 
-const ROLES: UserRole[] = ['applicant', 'officer', 'admin']
+const ROLES: UserRole[] = ['applicant', 'officer', 'regional_officer']
 
 afterEach(cleanup)
 beforeEach(() => localStorage.clear())
@@ -42,8 +42,10 @@ describe('role navigation', () => {
     for (const path of retired) expect(all).not.toContain(path)
   })
 
-  it('administrators can reach handbook references from the menu', () => {
-    expect(NAV_BY_ROLE.admin.map((i) => i.path)).toContain('/admin/handbook')
+  it('regional officers can reach handbook and delegation from the menu', () => {
+    const paths = NAV_BY_ROLE.regional_officer.map((i) => i.path)
+    expect(paths).toContain('/admin/handbook')
+    expect(paths).toContain('/admin/delegation')
   })
 
   it('applicant menu has no scrutiny or admin entries and vice versa', () => {
@@ -54,7 +56,7 @@ describe('role navigation', () => {
   })
 
   it('sidebar renders group headings and the active role entries only', () => {
-    localStorage.setItem('praman.demo.role', 'admin')
+    localStorage.setItem('praman.demo.role', 'regional_officer')
     render(
       <RoleProvider>
         <MemoryRouter initialEntries={['/admin']}>
@@ -75,7 +77,7 @@ describe('RequireRole', () => {
       <RoleProvider>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
-            <Route element={<RequireRole role="admin" />}>
+            <Route element={<RequireRole role="regional_officer" />}>
               <Route path="/admin" element={<div>admin area</div>} />
             </Route>
             <Route path="/applicant" element={<div>applicant home</div>} />
@@ -87,7 +89,7 @@ describe('RequireRole', () => {
   }
 
   it('lets the matching role in', () => {
-    renderAt('/admin', 'admin')
+    renderAt('/admin', 'regional_officer')
     expect(screen.getByText('admin area')).toBeTruthy()
   })
 

@@ -35,6 +35,8 @@ export function AdminDashboard() {
   const [healthError, setHealthError] = useState<string | null>(null)
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
+  const [unassigned, setUnassigned] = useState<number | null>(null)
+  const [atCap, setAtCap] = useState<number | null>(null)
 
   useEffect(() => {
     api
@@ -43,21 +45,46 @@ export function AdminDashboard() {
         setHealth(h)
         setHealthError(null)
       })
-      .catch(() => setHealthError('System health is unavailable — sign in as an administrator with the API running.'))
+      .catch(() =>
+        setHealthError(
+          'System health is unavailable — sign in as a regional officer with the API running.',
+        ),
+      )
     api
       .adminStats(role)
       .then((s) => {
         setStats(s)
         setStatsError(null)
       })
-      .catch(() => setStatsError('Admin statistics unavailable'))
+      .catch(() => setStatsError('Regional officer statistics unavailable'))
+    Promise.all([api.getDelegationQueue(role), api.listOfficersWithLoad(role)])
+      .then(([queue, officers]) => {
+        setUnassigned(queue.length)
+        setAtCap(officers.filter((o) => o.isAtCap).length)
+      })
+      .catch(() => {
+        setUnassigned(null)
+        setAtCap(null)
+      })
   }, [role])
 
   const overall = health ? overallLabel(health.status) : null
 
   return (
-    <AppShell title="System overview" breadcrumbs={['Administrator', 'Overview']}>
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <AppShell title="Regional overview" breadcrumbs={['Regional Officer', 'Overview']}>
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <StatCard
+          label="Unassigned"
+          value={unassigned ?? '—'}
+          hint="Need delegation"
+          icon={Activity}
+        />
+        <StatCard
+          label="Officers at cap"
+          value={atCap ?? '—'}
+          hint="Queue full"
+          icon={Users}
+        />
         <StatCard
           label="Managed users"
           value={stats?.userCount ?? '—'}
@@ -102,13 +129,14 @@ export function AdminDashboard() {
           </div>
           <p className="mt-2 text-xs text-ink-muted">
             {stats.applications.total} applications in total · {stats.applications.openClarifications}{' '}
-            open clarification(s) · administrators view these counts but do not decide applications.
+            open clarification(s) · regional officers oversee workload; scrutiny officers decide applications.
           </p>
         </Card>
       )}
 
       <div className="mb-5 flex flex-wrap gap-2">
         {[
+          ['/admin/delegation', 'Delegation'],
           ['/admin/users', 'Users'],
           ['/admin/categories', 'Categories'],
           ['/admin/rules', 'Rules'],

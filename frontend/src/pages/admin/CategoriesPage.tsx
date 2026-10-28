@@ -38,7 +38,7 @@ export function CategoriesPage() {
   }, [role])
 
   return (
-    <AppShell title="Application Categories" breadcrumbs={['Administrator', 'Categories']}>
+    <AppShell title="Application Categories" breadcrumbs={['Regional Officer', 'Categories']}>
       <DemoBanner>
         Categories drive the applicant document checklist. Edits are versioned via audit events; use
         Document Requirements to adjust checklist JSON per category.

@@ -170,7 +170,7 @@ export function SystemHealthPage() {
   return (
     <AppShell
       title="System health"
-      breadcrumbs={['Administrator', 'Health']}
+      breadcrumbs={['Regional Officer', 'Health']}
       actions={
         <>
           <Button size="sm" variant="outline" onClick={() => void verifyChain()}>

@@ -58,7 +58,7 @@ interface Props {
 export function AuthenticityPanel({ detail, role, onChanged }: Props) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const canAct = role === 'officer' || role === 'admin'
+  const canAct = role === 'officer' || role === 'regional_officer'
   const indicators = detail.forensicsIndicators ?? []
 
   const byDoc = detail.documents.map((d) => ({

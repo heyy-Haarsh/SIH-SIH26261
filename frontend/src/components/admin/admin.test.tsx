@@ -57,7 +57,7 @@ describe('RuleImportPanel', () => {
     mocked.validateRuleImport.mockResolvedValue(validation())
     mocked.importRules.mockResolvedValue({ created: [], activated: 0, message: '1 draft(s) saved.' })
     const onSaved = vi.fn()
-    render(<RuleImportPanel role="admin" onSaved={onSaved} />)
+    render(<RuleImportPanel role="regional_officer" onSaved={onSaved} />)
 
     const save = screen.getByRole('button', { name: 'Save as drafts' }) as HTMLButtonElement
     expect(save.disabled).toBe(true)
@@ -68,7 +68,7 @@ describe('RuleImportPanel', () => {
     expect(save.disabled).toBe(false)
 
     fireEvent.click(save)
-    await waitFor(() => expect(mocked.importRules).toHaveBeenCalledWith('admin', '[{"code":"SYN-X-1"}]'))
+    await waitFor(() => expect(mocked.importRules).toHaveBeenCalledWith('regional_officer', '[{"code":"SYN-X-1"}]'))
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
   })
 
@@ -90,7 +90,7 @@ describe('RuleImportPanel', () => {
         ],
       }),
     )
-    render(<RuleImportPanel role="admin" onSaved={() => {}} />)
+    render(<RuleImportPanel role="regional_officer" onSaved={() => {}} />)
     fireEvent.change(screen.getByLabelText('Rules JSON'), { target: { value: '{' } })
     fireEvent.click(screen.getByRole('button', { name: 'Validate' }))
     await waitFor(() => expect(screen.getByText(/line 3, column 5/)).toBeTruthy())
@@ -101,7 +101,7 @@ describe('RuleImportPanel', () => {
 
   it('editing the JSON after validating invalidates the previous result', async () => {
     mocked.validateRuleImport.mockResolvedValue(validation())
-    render(<RuleImportPanel role="admin" onSaved={() => {}} />)
+    render(<RuleImportPanel role="regional_officer" onSaved={() => {}} />)
     const box = screen.getByLabelText('Rules JSON')
     fireEvent.change(box, { target: { value: '[]' } })
     fireEvent.click(screen.getByRole('button', { name: 'Validate' }))
@@ -139,7 +139,7 @@ describe('RuleDraftPanel', () => {
     mocked.draftRuleFromText.mockResolvedValue(proposal)
     mocked.saveRuleDraft.mockResolvedValue({ created: [], activated: 0, message: 'Saved 1 draft.' })
     const onSaved = vi.fn()
-    render(<RuleDraftPanel role="admin" onSaved={onSaved} />)
+    render(<RuleDraftPanel role="regional_officer" onSaved={onSaved} />)
 
     fireEvent.change(screen.getByLabelText('Rule description'), {
       target: { value: 'The library must hold five thousand books.' },
@@ -155,7 +155,7 @@ describe('RuleDraftPanel', () => {
     expect(save.disabled).toBe(false)
     fireEvent.click(save)
     await waitFor(() =>
-      expect(mocked.saveRuleDraft).toHaveBeenCalledWith('admin', [
+      expect(mocked.saveRuleDraft).toHaveBeenCalledWith('regional_officer', [
         expect.objectContaining({ code: 'SYN-NL-ABC12345', version: 'v1' }),
       ]),
     )
@@ -165,7 +165,7 @@ describe('RuleDraftPanel', () => {
   })
 
   it('does not allow drafting from a very short description', () => {
-    render(<RuleDraftPanel role="admin" onSaved={() => {}} />)
+    render(<RuleDraftPanel role="regional_officer" onSaved={() => {}} />)
     fireEvent.change(screen.getByLabelText('Rule description'), { target: { value: 'short' } })
     expect((screen.getByRole('button', { name: 'Draft rule' }) as HTMLButtonElement).disabled).toBe(true)
   })

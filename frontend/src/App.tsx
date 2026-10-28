@@ -22,6 +22,7 @@ import { SettingsPage } from '@/pages/admin/SettingsPage'
 import { HandbookPage } from '@/pages/admin/HandbookPage'
 import { IntegrationsPage } from '@/pages/admin/IntegrationsPage'
 import { SystemHealthPage } from '@/pages/admin/SystemHealthPage'
+import { DelegationPage } from '@/pages/admin/DelegationPage'
 
 function RoleHomeRedirect() {
   const { role } = useRole()
@@ -61,9 +62,10 @@ function AppRoutes() {
         <Route path="/applicant/history" element={<Navigate to="/applicant/applications" replace />} />
       </Route>
 
-      {/* Administrator */}
-      <Route element={<RequireRole role="admin" />}>
+      {/* Regional Officer */}
+      <Route element={<RequireRole role="regional_officer" />}>
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/delegation" element={<DelegationPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/categories" element={<CategoriesPage />} />
         <Route path="/admin/requirements" element={<RequirementsPage />} />

@@ -29,8 +29,11 @@ def list_applications(db: Session, user: User):
         if not user.institution_id:
             return []
         q = q.filter(Application.institution_id == user.institution_id)
-    elif user.role == UserRole.ADMIN:
-        # Admins manage config; application list is officer-oriented. Still allow read for demo.
+    elif user.role == UserRole.OFFICER:
+        # Scrutiny officers only see applications delegated to them.
+        q = q.filter(Application.assigned_officer_id == user.id)
+    elif user.role == UserRole.REGIONAL_OFFICER:
+        # Regional officer sees the full region queue (assigned + unassigned).
         pass
     apps = q.order_by(Application.created_at.desc()).all()
     return [application_summary(db, a) for a in apps]
@@ -101,4 +104,8 @@ def create_application(
         application_id=app.id,
     )
     db.commit()
+    # Regional Officer policy: auto-assign to the least-burdened scrutiny officer.
+    from app.services import delegation_service
+
+    delegation_service.try_auto_delegate(db, app.id)
     return get_application(db, user, app.id)

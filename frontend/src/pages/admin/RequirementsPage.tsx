@@ -40,7 +40,7 @@ export function RequirementsPage() {
   const selected = items.find((c) => c.id === selectedId)
 
   return (
-    <AppShell title="Document Requirements" breadcrumbs={['Administrator', 'Requirements']}>
+    <AppShell title="Document Requirements" breadcrumbs={['Regional Officer', 'Requirements']}>
       <DemoBanner>
         Edit the checklist JSON for a category. Changes are audited with a reason. Prior applications
         keep their historical requirement snapshots on the application record where applicable.

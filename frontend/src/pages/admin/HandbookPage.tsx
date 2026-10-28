@@ -92,7 +92,7 @@ export function HandbookPage() {
   }
 
   return (
-    <AppShell title="Handbook references" breadcrumbs={['Administrator', 'Handbook references']}>
+    <AppShell title="Handbook references" breadcrumbs={['Regional Officer', 'Handbook references']}>
       <DemoBanner>
         Officers and applicants only see a handbook edition, section and page for a finding when a
         reference below is complete <strong>and</strong> marked verified. Enter a reference only after

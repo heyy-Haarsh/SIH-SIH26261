@@ -32,7 +32,7 @@ interface Props {
 
 export function IssuesPanel({ review, role, onOpenDocument, onChanged }: Props) {
   const [showResolved, setShowResolved] = useState(false)
-  const canResolve = role === 'officer' || role === 'admin'
+  const canResolve = role === 'officer' || role === 'regional_officer'
 
   const groups = review.issueGroups
     .map((g) => ({
@@ -42,16 +42,15 @@ export function IssuesPanel({ review, role, onOpenDocument, onChanged }: Props) 
     .filter((g) => g.issues.length > 0)
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Summary bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-secondary">
-          <span className="font-semibold text-ink">{review.openIssueCount} open</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <p className="text-ink-secondary">
+          <span className="font-semibold text-ink">{review.openIssueCount} open issues</span>
           {review.resolvedIssueCount > 0 &&
-            ` · ${review.resolvedIssueCount} resolved / waived / accepted`}
-          {' · '}one entry per real problem, grouped by document.
+            ` · ${review.resolvedIssueCount} resolved`}
         </p>
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-secondary">
+        <label className="flex cursor-pointer items-center gap-1.5 text-ink-secondary">
           <input
             type="checkbox"
             checked={showResolved}
@@ -65,7 +64,7 @@ export function IssuesPanel({ review, role, onOpenDocument, onChanged }: Props) 
       {/* Missing documents */}
       {review.missingDocuments.length > 0 && (
         <div className="rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <span className="font-medium">Not uploaded yet: </span>
+          <span className="font-semibold">Not uploaded yet: </span>
           {review.missingDocuments
             .map((m) => `${m.name}${m.mandatory ? '' : ' (optional)'}`)
             .join(', ')}
@@ -122,9 +121,9 @@ function GroupSection({
   onChanged: () => Promise<unknown> | void
 }) {
   return (
-    <section className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-white shadow-sm">
+    <section className="overflow-hidden rounded-[var(--radius-md)] border border-border bg-white shadow-[var(--shadow-card)]">
       {/* Group header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-4 py-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
           {group.documentName}
           {group.openCount > 0 && (
@@ -178,6 +177,7 @@ function IssueRow({
   onChanged: () => Promise<unknown> | void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [showResolve, setShowResolve] = useState(false)
   const isOpen = issue.status === 'open'
 
   const resolvable =
@@ -198,6 +198,7 @@ function IssueRow({
     for (const id of issue.findingIds) await api.resolveFinding(role, id, { status, reason })
     for (const id of issue.checkIds) await api.resolveDocVerificationCheck(role, id, { status, reason })
     await onChanged()
+    setShowResolve(false)
   }
 
   return (
@@ -208,20 +209,20 @@ function IssueRow({
         aria-expanded={expanded}
         disabled={!hasDetails}
         onClick={() => hasDetails && setExpanded((v) => !v)}
-        className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${
+        className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${
           hasDetails ? 'hover:bg-surface-muted' : ''
         }`}
       >
         {/* Chevron */}
-        <span className="mt-0.5 shrink-0 text-ink-muted">
+        <span className="shrink-0 text-ink-muted">
           {hasDetails ? (
             expanded ? (
-              <ChevronDown size={15} />
+              <ChevronDown size={13} />
             ) : (
-              <ChevronRight size={15} />
+              <ChevronRight size={13} />
             )
           ) : (
-            <span className="inline-block h-[15px] w-[15px]" />
+            <span className="inline-block h-[13px] w-[13px]" />
           )}
         </span>
 
@@ -254,24 +255,24 @@ function IssueRow({
 
       {/* ── Expanded detail panel ── */}
       {expanded && hasDetails && (
-        <div className="border-t border-border bg-surface px-4 py-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[var(--radius-md)] border border-border bg-white p-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+        <div className="space-y-3 border-t border-border bg-surface-muted px-4 py-3">
+          {(issue.explanation || issue.relatedDocuments.length > 0 || issue.evidence.length > 0) && (
+            <div>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
                 What we found
               </h4>
               {issue.explanation && (
-                <p className="mt-1.5 text-sm text-ink-secondary">{issue.explanation}</p>
+                <p className="mt-1 text-sm text-ink-secondary">{issue.explanation}</p>
               )}
               {issue.relatedDocuments.length > 0 && (
-                <p className="mt-2 text-xs text-ink-muted">
+                <p className="mt-1.5 text-xs text-ink-muted">
                   <span className="font-medium text-ink-secondary">Involves: </span>
                   {issue.relatedDocuments.map((d, i) => (
                     <span key={d.id}>
                       {i > 0 && ', '}
                       <button
                         type="button"
-                        className="text-brand underline"
+                        className="text-brand underline hover:text-brand-dark"
                         onClick={() => onOpenDocument(d.id)}
                       >
                         {d.name}
@@ -281,11 +282,11 @@ function IssueRow({
                 </p>
               )}
               {issue.evidence.length > 0 && (
-                <details className="mt-2">
+                <details className="mt-1.5">
                   <summary className="cursor-pointer text-xs font-medium text-ink-secondary">
                     Evidence ({issue.evidence.length})
                   </summary>
-                  <ul className="mt-1 space-y-1 text-xs text-ink-muted">
+                  <ul className="mt-1 space-y-0.5 text-xs text-ink-muted">
                     {issue.evidence.map((e, i) => (
                       <li key={`${e.text}-${i}`}>
                         {e.text}
@@ -294,47 +295,51 @@ function IssueRow({
                       </li>
                     ))}
                   </ul>
-                  {issue.handbook.status !== 'verified' && (
-                    <p className="mt-1 text-xs text-ink-muted">{issue.handbook.note}</p>
-                  )}
                 </details>
               )}
             </div>
+          )}
 
-            <div className="rounded-[var(--radius-md)] border border-border bg-white p-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          {(issue.applicantAction || issue.handbook.status === 'verified') && (
+            <div>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
                 For the applicant
               </h4>
-              {issue.applicantAction ? (
-                <p className="mt-1.5 flex items-start gap-2 text-sm text-ink-secondary">
+              {issue.applicantAction && (
+                <p className="mt-1 flex items-start gap-1.5 text-sm text-ink-secondary">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
-                  {issue.applicantAction}
+                  <span>{issue.applicantAction}</span>
                 </p>
-              ) : (
-                <p className="mt-1.5 text-sm text-ink-muted">No applicant action on this item.</p>
               )}
               {issue.handbook.status === 'verified' && (
-                <div className="mt-2">
+                <div className="mt-1.5">
                   <HandbookBadge reference={issue.handbook} />
                 </div>
               )}
             </div>
+          )}
 
-            {resolvable && (
-              <div className="md:col-span-2">
-                <ResolveControl
-                  role={role}
-                  onResolve={resolve}
-                  draftContext={{
-                    title: issue.title,
-                    explanation: issue.explanation,
-                    applicantAction: issue.applicantAction,
-                    documentName: issue.documentName,
-                  }}
-                />
-              </div>
-            )}
-          </div>
+          {resolvable && !showResolve && (
+            <button
+              type="button"
+              className="text-[11px] font-medium text-accent underline-offset-2 hover:underline"
+              onClick={() => setShowResolve(true)}
+            >
+              Resolve…
+            </button>
+          )}
+          {resolvable && showResolve && (
+            <ResolveControl
+              role={role}
+              onResolve={resolve}
+              draftContext={{
+                title: issue.title,
+                explanation: issue.explanation,
+                applicantAction: issue.applicantAction,
+                documentName: issue.documentName,
+              }}
+            />
+          )}
         </div>
       )}
     </li>

@@ -47,7 +47,7 @@ def test_full_application_pipeline_smoke(client):
 
     chain = client.get(
         "/api/v1/admin/audit-chain/verify",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
     )
     assert chain.status_code == 200
     assert "ok" in chain.json()

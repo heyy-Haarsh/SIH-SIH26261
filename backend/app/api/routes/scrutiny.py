@@ -31,7 +31,7 @@ from app.services import document_report_service, speech_to_text_service, scruti
 router = APIRouter(tags=["scrutiny"])
 logger = logging.getLogger("praman.stt")
 
-_officer = require_roles(UserRole.OFFICER, UserRole.ADMIN)
+_officer = require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)
 
 
 def _app(db: Session, application_id: str) -> Application:
@@ -50,7 +50,7 @@ def _ws_officer(role: str | None, user_id: str | None) -> User | None:
         claimed = UserRole(role.strip().lower())
     except ValueError:
         return None
-    if claimed not in (UserRole.OFFICER, UserRole.ADMIN):
+    if claimed not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         return None
     ident = user_id.strip()
     resolved = DEMO_USER_ALIASES.get(ident.lower(), ident)

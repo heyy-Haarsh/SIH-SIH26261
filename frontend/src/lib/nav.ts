@@ -14,6 +14,7 @@ import {
   Settings,
   Upload,
   Users,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
@@ -24,12 +25,14 @@ export interface NavItem {
   icon: LucideIcon
   /** Optional group heading shown above the first item of a group. */
   section?: string
+  /** Optional badge key resolved by the sidebar (e.g. newDelegations). */
+  badgeKey?: string
 }
 
 export const ROLE_HOME: Record<UserRole, string> = {
   applicant: '/applicant',
   officer: '/officer',
-  admin: '/admin',
+  regional_officer: '/admin',
 }
 
 /**
@@ -46,11 +49,22 @@ export const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
   ],
   officer: [
     { label: 'Overview', path: '/officer', icon: LayoutDashboard, section: 'Scrutiny' },
-    { label: 'Application Queue', path: '/officer/queue', icon: FolderOpen },
+    {
+      label: 'Application Queue',
+      path: '/officer/queue',
+      icon: FolderOpen,
+      badgeKey: 'myQueue',
+    },
     { label: 'Cross-document Review', path: '/officer/comparison', icon: GitCompare },
   ],
-  admin: [
+  regional_officer: [
     { label: 'Overview', path: '/admin', icon: LayoutDashboard, section: 'Operations' },
+    {
+      label: 'Delegation Queue',
+      path: '/admin/delegation',
+      icon: Workflow,
+      badgeKey: 'unassigned',
+    },
     { label: 'System Health', path: '/admin/health', icon: HeartPulse },
     { label: 'Audit Trail', path: '/admin/audit', icon: Activity },
     { label: 'Integrations', path: '/admin/integrations', icon: Plug },
@@ -62,4 +76,3 @@ export const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { label: 'Settings', path: '/admin/settings', icon: Settings },
   ],
 }
-

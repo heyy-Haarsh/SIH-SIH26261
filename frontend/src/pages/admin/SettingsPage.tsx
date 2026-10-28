@@ -40,7 +40,7 @@ export function SettingsPage() {
   }, [role])
 
   return (
-    <AppShell title="Verification & Settings" breadcrumbs={['Administrator', 'Settings']}>
+    <AppShell title="Verification & Settings" breadcrumbs={['Regional Officer', 'Settings']}>
       <DemoBanner>
         Safe non-secret configuration only. API keys and passwords cannot be stored here. Settings can
         only make the platform stricter than the server configuration; the note under each setting says
@@ -63,7 +63,7 @@ export function SettingsPage() {
           <Card key={s.key}>
             <CardHeader
               title={s.key}
-              description={s.description || 'Administrator setting'}
+              description={s.description || 'Regional officer setting'}
               action={
                 <Badge tone={s.key === 'verification' ? 'warning' : 'neutral'}>{s.key}</Badge>
               }

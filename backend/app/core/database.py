@@ -101,6 +101,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     ensure_additive_columns()
+    migrate_admin_role_to_regional_officer()
 
 
 # Columns added after the first release. ``create_all`` never alters existing tables, so demo
@@ -111,6 +112,7 @@ _ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("findings", "fingerprint", "VARCHAR(64) NOT NULL DEFAULT ''"),
     ("findings", "resolution_reason", "TEXT"),
     ("findings", "resolved_at", "DATETIME"),
+    ("users", "last_delegated_at", "DATETIME"),
     ("handbook_references", "academic_year", "VARCHAR(32) NOT NULL DEFAULT ''"),
     ("handbook_references", "applicable_categories", "VARCHAR(255) NOT NULL DEFAULT ''"),
 )
@@ -130,6 +132,20 @@ def ensure_additive_columns(bind: Engine | None = None) -> None:
         with target.begin() as conn:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
         logger.info("Added missing column %s.%s", table, column)
+
+
+def migrate_admin_role_to_regional_officer(bind: Engine | None = None) -> None:
+    """Rename legacy role value admin → regional_officer (string storage)."""
+    target = bind or engine
+    try:
+        with target.begin() as conn:
+            result = conn.execute(
+                text("UPDATE users SET role = 'regional_officer' WHERE role = 'admin'")
+            )
+            if result.rowcount:
+                logger.info("Migrated %s user(s) from admin → regional_officer", result.rowcount)
+    except Exception as exc:  # noqa: BLE001 — demo DB may not have users yet
+        logger.debug("admin→regional_officer migration skipped: %s", exc)
 
 
 def database_status() -> str:

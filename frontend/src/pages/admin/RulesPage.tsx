@@ -149,7 +149,7 @@ export function RulesPage() {
   }
 
   return (
-    <AppShell title="Regulatory rules" breadcrumbs={['Administrator', 'Rules']}>
+    <AppShell title="Regulatory rules" breadcrumbs={['Regional Officer', 'Rules']}>
       <DemoBanner>
         Rules shipped with the demo are synthetic and labelled so. Official rules need a verified source
         citation. Activating a version only affects future checks — results already recorded keep the

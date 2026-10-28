@@ -38,7 +38,7 @@ def start_extraction(
     force: bool = False,
     run_validation_after: bool = True,
 ) -> ExtractionRun:
-    if user.role not in (UserRole.APPLICANT, UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.APPLICANT, UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise HTTPException(status_code=403, detail="Insufficient role")
 
     doc = _get_document_for_user(db, user, document_id)
@@ -119,7 +119,7 @@ def correct_field(
     *,
     corrected_value: str,
 ) -> ExtractedField:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise HTTPException(status_code=403, detail="Only officers can correct extracted fields")
     field = db.query(ExtractedField).filter(ExtractedField.id == field_id).first()
     if not field:

@@ -26,11 +26,11 @@ export const DEMO_USERS: Record<string, User> = {
     email: 'officer.demo@aicte.example',
     role: 'officer',
   },
-  admin: {
+  regional_officer: {
     id: 'usr-adm-001',
     name: 'Priya Nair',
-    email: 'admin.demo@praman.local',
-    role: 'admin',
+    email: 'regional.demo@praman.local',
+    role: 'regional_officer',
   },
 }
 

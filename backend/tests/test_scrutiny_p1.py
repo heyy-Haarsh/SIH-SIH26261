@@ -15,7 +15,7 @@ from tests.conftest import auth_headers
 
 APPLICANT = auth_headers("applicant")
 OFFICER = auth_headers("officer")
-ADMIN = auth_headers("admin")
+ADMIN = auth_headers("regional_officer")
 
 
 def _create(client):

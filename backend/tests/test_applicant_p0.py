@@ -125,7 +125,7 @@ def test_applicant_view_has_no_internal_scrutiny_data(client):
 
 def test_applicant_view_is_applicant_only(client):
     app = _create(client).json()
-    for role in ("officer", "admin"):
+    for role in ("officer", "regional_officer"):
         res = client.get(f"/api/v1/applicant/applications/{app['id']}", headers=auth_headers(role))
         assert res.status_code in (403, 404), role
 

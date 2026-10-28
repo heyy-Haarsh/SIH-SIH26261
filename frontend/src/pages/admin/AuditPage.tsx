@@ -193,7 +193,7 @@ export function AuditPage() {
   return (
     <AppShell
       title="Audit trail"
-      breadcrumbs={['Administrator', 'Audit']}
+      breadcrumbs={['Regional Officer', 'Audit']}
       actions={
         <>
           <Button size="sm" variant="outline" leftIcon={<ShieldCheck size={14} />} onClick={() => void verifyChain()}>

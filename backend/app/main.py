@@ -20,7 +20,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, init_db
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.seed import seed_if_empty
+from app.core.seed import ensure_regional_demo_users, seed_if_empty
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         seed_if_empty(db)
+        ensure_regional_demo_users(db)
         runtime_config.load_from_db(db)
     finally:
         db.close()

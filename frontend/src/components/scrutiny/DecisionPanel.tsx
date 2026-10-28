@@ -19,7 +19,7 @@ interface Props {
 }
 
 export function DecisionPanel({ detail, review, role, onChanged }: Props) {
-  const canAct = role === 'officer' || role === 'admin'
+  const canAct = role === 'officer' || role === 'regional_officer'
   const decision = review?.decision
   const closed = TERMINAL.has(detail.status)
   const [note, setNote] = useState('')

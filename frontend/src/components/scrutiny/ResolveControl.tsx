@@ -120,10 +120,10 @@ export function ResolveControl({
   }
 
   return (
-    <div className="rounded-[var(--radius-md)] border border-border bg-white p-3">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <div className="mt-2 space-y-2 border-t border-border pt-2">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
         <label className="text-xs font-semibold text-ink">{label}</label>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {draftContext && (
             <Button
               type="button"
@@ -150,7 +150,8 @@ export function ResolveControl({
         </div>
       </div>
       <Textarea
-        rows={3}
+        rows={2}
+        className="w-full text-sm"
         value={reason}
         placeholder={placeholder}
         aria-label={label}
@@ -164,7 +165,7 @@ export function ResolveControl({
       )}
       {hint && <p className="mt-1 text-[11px] text-ink-muted">{hint}</p>}
       {error && <p className="mt-1 text-[11px] text-status-failed">{error}</p>}
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
         {RESOLUTIONS.map((st) => (
           <Button
             key={st}
@@ -177,9 +178,8 @@ export function ResolveControl({
           </Button>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-ink-muted">
-        Speak streams audio to Sarvam in real time (Indic speech is translated to English for the
-        final lines). Edit before marking. Dictation only — not an official determination.
+      <p className="text-[10px] leading-tight text-ink-muted">
+        Dictation streams to Sarvam (Indic → English). Edit before marking. Not an official determination.
       </p>
     </div>
   )

@@ -44,7 +44,7 @@ def run_application_pipeline(
     user: User,
     application_id: str,
 ) -> list[DocumentVerificationRun]:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN, UserRole.APPLICANT):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER, UserRole.APPLICANT):
         raise ForbiddenError("Insufficient permissions")
     app = _get_app(db, application_id)
     ensure_application_access(user, app)
@@ -54,7 +54,7 @@ def run_application_pipeline(
 def run_document_pipeline(
     db: Session, user: User, document_id: str
 ) -> DocumentVerificationRun:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN, UserRole.APPLICANT):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER, UserRole.APPLICANT):
         raise ForbiddenError("Insufficient permissions")
     doc = db.get(Document, document_id)
     if not doc:
@@ -103,7 +103,7 @@ def resolve_check(
     status: str,
     reason: str,
 ) -> DocumentVerificationCheck:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only officers may resolve verification checks.")
     reason = (reason or "").strip()
     if len(reason) < 5:

@@ -19,7 +19,7 @@ class ResolveCheckIn(BaseModel):
 
 
 @router.get("/document-verification/configs")
-def get_configs(user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN))):
+def get_configs(user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER))):
     _ = user
     return svc.list_engine_configs()
 
@@ -28,7 +28,7 @@ def get_configs(user: User = Depends(require_roles(UserRole.OFFICER, UserRole.AD
 def run_app_verification(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     runs = svc.run_application_pipeline(db, user, application_id)
     return [svc.run_to_dict(r) for r in runs]
@@ -38,7 +38,7 @@ def run_app_verification(
 def list_app_verification(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     runs = svc.list_runs_for_application(db, user, application_id)
     return [svc.run_to_dict(r) for r in runs]
@@ -48,7 +48,7 @@ def list_app_verification(
 def run_doc_verification(
     document_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     run = svc.run_document_pipeline(db, user, document_id)
     return svc.run_to_dict(run)
@@ -58,7 +58,7 @@ def run_doc_verification(
 def get_run(
     run_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     return svc.run_to_dict(svc.get_run(db, user, run_id))
 

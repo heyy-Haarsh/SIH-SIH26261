@@ -97,7 +97,7 @@ def test_unauthorized_document_extraction(client):
 
 
 def test_ocr_capability_endpoint(client):
-    res = client.get("/api/v1/extraction/ocr-capability", headers=auth_headers("admin"))
+    res = client.get("/api/v1/extraction/ocr-capability", headers=auth_headers("regional_officer"))
     assert res.status_code == 200
     body = res.json()
     assert "available" in body

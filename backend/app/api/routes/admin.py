@@ -39,7 +39,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @router.get("/stats")
 def get_stats(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.admin_stats(db, user)
 
@@ -47,7 +47,7 @@ def get_stats(
 @router.get("/institutions")
 def list_institutions(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return [
         {
@@ -67,7 +67,7 @@ def list_institutions(
 @router.get("/users")
 def list_users(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return [admin_service.user_to_dict(u) for u in admin_service.list_users(db, user)]
 
@@ -76,7 +76,7 @@ def list_users(
 def create_user(
     body: UserCreateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.user_to_dict(admin_service.create_user(db, user, body.model_dump()))
 
@@ -86,7 +86,7 @@ def update_user(
     user_id: str,
     body: UserUpdateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.user_to_dict(
         admin_service.update_user(db, user, user_id, body.model_dump(exclude_unset=True))
@@ -97,7 +97,7 @@ def update_user(
 def deactivate_user(
     user_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
     reason: str = Query("Deactivated by administrator", min_length=3),
 ):
     return admin_service.user_to_dict(
@@ -111,7 +111,7 @@ def deactivate_user(
 @router.get("/categories")
 def list_categories(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.OFFICER)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER, UserRole.OFFICER)),
     only_active: bool = False,
 ):
     return [
@@ -124,7 +124,7 @@ def list_categories(
 def create_category(
     body: CategoryCreateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     data = body.model_dump()
     data["required_documents"] = [d if isinstance(d, dict) else d.model_dump() for d in body.required_documents]
@@ -136,7 +136,7 @@ def update_category(
     category_id: str,
     body: CategoryUpdateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     data = body.model_dump(exclude_unset=True)
     if "required_documents" in data and data["required_documents"] is not None:
@@ -154,7 +154,7 @@ def update_category(
 @router.get("/rules")
 def list_rules(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.OFFICER)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER, UserRole.OFFICER)),
     only_active: bool = False,
     synthetic: Optional[bool] = None,
 ):
@@ -168,7 +168,7 @@ def list_rules(
 def validate_rule(
     body: RuleCreateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.preview_validate_rule(db, user, body.model_dump())
 
@@ -177,7 +177,7 @@ def validate_rule(
 def create_rule(
     body: RuleCreateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.rule_to_dict(admin_service.create_rule(db, user, body.model_dump()))
 
@@ -187,7 +187,7 @@ def update_rule(
     rule_id: str,
     body: RuleUpdateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.rule_to_dict(
         admin_service.update_rule_meta(db, user, rule_id, body.model_dump(exclude_unset=True))
@@ -199,7 +199,7 @@ def create_rule_version(
     rule_id: str,
     body: RuleVersionCreateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.rule_to_dict(
         admin_service.create_rule_version(
@@ -220,7 +220,7 @@ def publish_rule_version(
     rule_id: str,
     version: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
     reason: str = Query("", max_length=500),
 ):
     return admin_service.rule_to_dict(
@@ -233,7 +233,7 @@ def reactivate_rule_version(
     rule_id: str,
     version: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
     reason: str = Query(..., min_length=5, max_length=500),
 ):
     return admin_service.rule_to_dict(
@@ -247,7 +247,7 @@ def reactivate_rule_version(
 @router.get("/settings")
 def list_settings(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return [admin_service.setting_to_dict(s) for s in admin_service.list_settings(db, user)]
 
@@ -256,7 +256,7 @@ def list_settings(
 def get_setting(
     key: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.setting_to_dict(admin_service.get_setting(db, key, create_default=True))
 
@@ -266,7 +266,7 @@ def update_setting(
     key: str,
     body: SettingUpdateIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.setting_to_dict(
         admin_service.update_setting(
@@ -281,7 +281,7 @@ def update_setting(
 @router.get("/audit")
 def list_audit(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
     action: Optional[str] = None,
     category: Optional[str] = None,
     actor: Optional[str] = None,
@@ -324,7 +324,7 @@ def list_audit(
 @router.get("/audit/facets")
 def audit_facets(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.audit_facets(db, user)
 
@@ -340,7 +340,7 @@ def _csv_cell(value: object) -> str:
 @router.get("/audit/export.csv")
 def export_audit_csv(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
     action: Optional[str] = None,
     category: Optional[str] = None,
     actor: Optional[str] = None,
@@ -417,13 +417,13 @@ def export_audit_csv(
 def get_audit_event(
     event_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.audit_event_detail(db, user, event_id)
 
 
 @router.get("/jobs")
-def list_jobs(_: User = Depends(require_roles(UserRole.ADMIN))):
+def list_jobs(_: User = Depends(require_roles(UserRole.REGIONAL_OFFICER))):
     return {
         "backend": "local_sync",
         "celeryEnabled": False,
@@ -440,7 +440,7 @@ def verify_audit_chain(
     from_seq: Optional[int] = Query(None),
     to_seq: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     _ = user
     from app.services.audit_chain_service import verify_chain_integrity
@@ -460,7 +460,7 @@ def verify_audit_chain(
 @router.get("/handbook-references")
 def list_handbook_references(
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     from app.services import handbook_service
 
@@ -472,7 +472,7 @@ def list_handbook_references(
 def upsert_handbook_reference(
     body: HandbookReferenceIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     from app.services import handbook_service
 
@@ -483,7 +483,7 @@ def upsert_handbook_reference(
 def delete_handbook_reference(
     reference_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     from app.services import handbook_service
 
@@ -499,7 +499,7 @@ def delete_handbook_reference(
 def validate_rule_import(
     body: RuleImportIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     items, file_errors = rule_import_service.parse_payload(body.json_text, body.rules)
     results = rule_import_service.validate_items(db, items) if not file_errors or items else []
@@ -517,7 +517,7 @@ def validate_rule_import(
 def import_rules(
     body: RuleImportIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     items, file_errors = rule_import_service.parse_payload(body.json_text, body.rules)
     if file_errors:
@@ -529,7 +529,7 @@ def import_rules(
 def draft_rule_from_text(
     body: RuleDraftIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return rule_import_service.draft_from_text(db, body.text)
 
@@ -538,7 +538,7 @@ def draft_rule_from_text(
 def save_rule_draft(
     body: RuleImportIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     items, file_errors = rule_import_service.parse_payload(body.json_text, body.rules)
     if file_errors:
@@ -551,7 +551,7 @@ def discard_rule_draft(
     rule_id: str,
     version: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
     reason: str = Query(..., min_length=3, max_length=500),
 ):
     return admin_service.rule_to_dict(
@@ -563,7 +563,7 @@ def discard_rule_draft(
 def rule_usage(
     rule_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return admin_service.rule_usage(db, user, rule_id)
 
@@ -572,13 +572,13 @@ def rule_usage(
 
 
 @router.get("/integrations")
-def list_integrations(_: User = Depends(require_roles(UserRole.ADMIN))):
+def list_integrations(_: User = Depends(require_roles(UserRole.REGIONAL_OFFICER))):
     items = integration_service.list_integrations()
     return {"items": items, "summary": integration_service.summarize(items)}
 
 
 @router.get("/integrations/{integration_id}")
-def get_integration(integration_id: str, _: User = Depends(require_roles(UserRole.ADMIN))):
+def get_integration(integration_id: str, _: User = Depends(require_roles(UserRole.REGIONAL_OFFICER))):
     return integration_service.get_integration(integration_id)
 
 
@@ -587,7 +587,7 @@ def toggle_integration(
     integration_id: str,
     body: IntegrationToggleIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return integration_service.set_integration_enabled(
         db, user, integration_id, enabled=body.enabled, reason=body.reason
@@ -598,7 +598,7 @@ def toggle_integration(
 def check_integration(
     integration_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     result = integration_service.check_integration(integration_id)
     from app.services.audit_service import record_audit
@@ -620,6 +620,94 @@ def check_integration(
 @router.get("/system-health")
 def get_system_health(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.ADMIN)),
+    _: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return system_health_service.system_health(db)
+
+
+# ---- delegation (Regional Officer) ------------------------------------------
+
+
+@router.get("/officers")
+def list_officers_with_load(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    from app.services import delegation_service
+
+    return delegation_service.list_officers_with_load(db, user)
+
+
+@router.get("/officers/{officer_id}/queue")
+def get_officer_queue(
+    officer_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    from app.services import delegation_service
+    from app.services.serializers import application_summary
+
+    apps = delegation_service.officer_queue(db, user, officer_id)
+    return [application_summary(db, a) for a in apps]
+
+
+@router.get("/delegation/queue")
+def get_delegation_queue(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    from app.services import delegation_service
+    from app.services.serializers import application_summary
+
+    apps = delegation_service.unassigned_queue(db, user)
+    return [application_summary(db, a) for a in apps]
+
+
+@router.post("/applications/{application_id}/delegate")
+def delegate_application(
+    application_id: str,
+    body: dict | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    from app.services import delegation_service
+    from app.services.serializers import application_summary
+
+    payload = body or {}
+    officer_id = payload.get("officerId") or payload.get("officer_id")
+    app = delegation_service.delegate(db, user, application_id, officer_id=officer_id)
+    return application_summary(db, app)
+
+
+@router.post("/applications/bulk-delegate")
+def bulk_delegate_applications(
+    body: dict | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    from app.services import delegation_service
+
+    payload = body or {}
+    ids = payload.get("applicationIds") or payload.get("application_ids")
+    return {"results": delegation_service.bulk_delegate(db, user, ids)}
+
+
+@router.get("/delegation/settings")
+def get_delegation_settings(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    from app.services import delegation_service
+
+    return delegation_service.get_weights(db)
+
+
+@router.put("/delegation/settings")
+def update_delegation_settings(
+    body: dict,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    from app.services import delegation_service
+
+    return delegation_service.set_weights(db, user, body)

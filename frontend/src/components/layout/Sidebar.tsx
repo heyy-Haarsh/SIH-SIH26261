@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react'
 import { clsx } from 'clsx'
 import { ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useRole } from '@/app/RoleContext'
 import { NAV_BY_ROLE, ROLE_HOME } from '@/lib/nav'
+import { api } from '@/services/api'
 
 export function Sidebar({
   collapsed,
@@ -14,6 +16,37 @@ export function Sidebar({
   const { role } = useRole()
   const items = NAV_BY_ROLE[role]
   const location = useLocation()
+  const [badges, setBadges] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        if (role === 'regional_officer') {
+          const queue = await api.getDelegationQueue(role)
+          if (!cancelled) setBadges({ unassigned: queue.length })
+        } else if (role === 'officer') {
+          const apps = await api.listApplications(role)
+          const mine = apps.filter(
+            (a) =>
+              a.stage === 'awaiting_scrutiny' ||
+              a.stage === 'under_scrutiny' ||
+              a.status === 'submitted' ||
+              a.status === 'processing',
+          )
+          if (!cancelled) setBadges({ myQueue: mine.length })
+        } else if (!cancelled) {
+          setBadges({})
+        }
+      } catch {
+        if (!cancelled) setBadges({})
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [role, location.pathname])
 
   return (
     <aside
@@ -59,7 +92,6 @@ export function Sidebar({
               end={item.path === ROLE_HOME[role]}
               title={collapsed ? item.label : undefined}
               className={({ isActive }) => {
-                // "My Applications" also covers an application's own page, but not "New Application".
                 const active =
                   item.path === '/applicant/applications'
                     ? isActive && location.pathname !== '/applicant/applications/new'
@@ -74,7 +106,19 @@ export function Sidebar({
               }}
             >
               <item.icon size={18} className="shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && (
+                <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="truncate">{item.label}</span>
+                  {item.badgeKey && (badges[item.badgeKey] ?? 0) > 0 && (
+                    <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {badges[item.badgeKey]}
+                    </span>
+                  )}
+                </span>
+              )}
+              {collapsed && item.badgeKey && (badges[item.badgeKey] ?? 0) > 0 && (
+                <span className="absolute ml-5 mt-[-18px] h-2 w-2 rounded-full bg-brand" />
+              )}
             </NavLink>
           </div>
         ))}
@@ -93,5 +137,3 @@ export function Sidebar({
     </aside>
   )
 }
-
-

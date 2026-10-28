@@ -363,7 +363,82 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  // ---- Admin (Phase 6) ----------------------------------------------------
+  // ---- Regional Officer / Admin (Phase 6 + delegation) --------------------
+  listOfficersWithLoad: (role: string) =>
+    request<
+      Array<{
+        id: string
+        name: string
+        email: string
+        isActive: boolean
+        activeCount: number
+        openIssues: number
+        lastAssignedAt?: string | null
+        maxQueueCap: number
+        isAtCap: boolean
+      }>
+    >('/admin/officers', { role }),
+
+  getDelegationQueue: (role: string) =>
+    request<ApplicationSummary[]>('/admin/delegation/queue', { role }),
+
+  getOfficerQueue: (role: string, officerId: string) =>
+    request<ApplicationSummary[]>(`/admin/officers/${officerId}/queue`, { role }),
+
+  delegateApplication: (role: string, applicationId: string, officerId?: string) =>
+    request<ApplicationSummary>(`/admin/applications/${applicationId}/delegate`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(officerId ? { officerId } : {}),
+    }),
+
+  bulkDelegate: (role: string, applicationIds?: string[]) =>
+    request<{
+      results: Array<{
+        applicationId: string
+        applicationNumber?: string
+        ok: boolean
+        officerId?: string | null
+        officerName?: string | null
+        error?: string
+      }>
+    }>('/admin/applications/bulk-delegate', {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applicationIds ? { applicationIds } : {}),
+    }),
+
+  getDelegationSettings: (role: string) =>
+    request<{
+      active_count_weight: number
+      open_issues_weight: number
+      recency_weight: number
+      max_queue_cap: number
+    }>('/admin/delegation/settings', { role }),
+
+  updateDelegationSettings: (
+    role: string,
+    body: Partial<{
+      active_count_weight: number
+      open_issues_weight: number
+      recency_weight: number
+      max_queue_cap: number
+    }>,
+  ) =>
+    request<{
+      active_count_weight: number
+      open_issues_weight: number
+      recency_weight: number
+      max_queue_cap: number
+    }>('/admin/delegation/settings', {
+      method: 'PUT',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
   adminStats: (role: string) => request<AdminStats>('/admin/stats', { role }),
 
   listAdminUsers: (role: string) => request<AdminUser[]>('/admin/users', { role }),

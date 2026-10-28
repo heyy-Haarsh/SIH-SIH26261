@@ -125,10 +125,16 @@ def seed_if_empty(db: Session) -> None:
                 role=UserRole.OFFICER,
             ),
             User(
+                id="usr-off-002",
+                name="Sneha Kulkarni",
+                email="officer2.demo@aicte.example",
+                role=UserRole.OFFICER,
+            ),
+            User(
                 id="usr-adm-001",
                 name="Priya Nair",
-                email="admin.demo@praman.local",
-                role=UserRole.ADMIN,
+                email="regional.demo@praman.local",
+                role=UserRole.REGIONAL_OFFICER,
             ),
         ]
     )
@@ -516,3 +522,26 @@ def seed_if_empty(db: Session) -> None:
     )
 
     db.commit()
+
+
+def ensure_regional_demo_users(db: Session) -> None:
+    """Idempotent: second scrutiny officer + regional role rename for existing demo DBs."""
+    changed = False
+    if db.get(User, "usr-off-002") is None:
+        db.add(
+            User(
+                id="usr-off-002",
+                name="Sneha Kulkarni",
+                email="officer2.demo@aicte.example",
+                role=UserRole.OFFICER,
+            )
+        )
+        changed = True
+    regional = db.get(User, "usr-adm-001")
+    if regional is not None and regional.role != UserRole.REGIONAL_OFFICER:
+        regional.role = UserRole.REGIONAL_OFFICER
+        if regional.email == "admin.demo@praman.local":
+            regional.email = "regional.demo@praman.local"
+        changed = True
+    if changed:
+        db.commit()

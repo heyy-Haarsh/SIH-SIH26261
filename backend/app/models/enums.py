@@ -14,7 +14,7 @@ class StrEnum(str, enum.Enum):
 class UserRole(StrEnum):
     APPLICANT = "applicant"
     OFFICER = "officer"
-    ADMIN = "admin"
+    REGIONAL_OFFICER = "regional_officer"
 
 
 class ApplicationStatus(StrEnum):

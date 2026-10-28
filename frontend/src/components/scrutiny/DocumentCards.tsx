@@ -40,9 +40,9 @@ export function DocumentCards({ review, onOpen }: Props) {
             key={m.code}
             className="flex items-start gap-3 rounded-[var(--radius-md)] border border-dashed border-border bg-surface p-3"
           >
-            <FileX size={20} className="mt-0.5 text-ink-muted" />
+            <FileX size={20} className="mt-0.5 shrink-0 text-amber-600" />
             <div>
-              <div className="text-sm font-medium text-ink">{m.name}</div>
+              <div className="text-sm font-medium text-amber-700">{m.name}</div>
               <div className="text-[11px] text-ink-muted">
                 {m.mandatory ? 'Mandatory' : 'Optional'} · not uploaded
               </div>
@@ -61,7 +61,7 @@ function Card({ doc, onOpen }: { doc: DocumentCard; onOpen: (id: string) => void
     <button
       type="button"
       onClick={() => onOpen(doc.id)}
-      className={`flex flex-col gap-2 rounded-[var(--radius-md)] border border-border border-l-4 bg-white p-3 text-left transition-colors hover:bg-surface-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${bar}`}
+      className={`flex flex-col gap-2 rounded-[var(--radius-md)] border border-border border-l-4 bg-white p-3 text-left transition-all hover:bg-surface-muted hover:shadow-[var(--shadow-card)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${bar}`}
       aria-label={`Open ${doc.name}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -92,15 +92,18 @@ function Card({ doc, onOpen }: { doc: DocumentCard; onOpen: (id: string) => void
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1 text-[10px] text-ink-muted">
-        <span className="rounded border border-border px-1.5 py-0.5">
-          L1 {(doc.ruleValidationStatus ?? 'pending').replace(/_/g, ' ')}
+      <div className="mt-2 grid grid-cols-3 gap-1 text-[10px]">
+        <span className="flex flex-col items-start gap-0.5 rounded border border-border bg-surface px-1.5 py-1">
+          <span className="text-ink-muted">Rules</span>
+          <span className="font-medium text-ink">{(doc.ruleValidationStatus ?? 'pending').replace(/_/g, ' ')}</span>
         </span>
-        <span className="rounded border border-border px-1.5 py-0.5">
-          L2 {(doc.externalVerificationStatus ?? 'pending').replace(/_/g, ' ')}
+        <span className="flex flex-col items-start gap-0.5 rounded border border-border bg-surface px-1.5 py-1">
+          <span className="text-ink-muted">Ext. verify</span>
+          <span className="font-medium text-ink">{(doc.externalVerificationStatus ?? 'pending').replace(/_/g, ' ')}</span>
         </span>
-        <span className="rounded border border-border px-1.5 py-0.5">
-          L3 {(doc.reviewStatus ?? 'pending').replace(/_/g, ' ')}
+        <span className="flex flex-col items-start gap-0.5 rounded border border-border bg-surface px-1.5 py-1">
+          <span className="text-ink-muted">Review</span>
+          <span className="font-medium text-ink">{(doc.reviewStatus ?? 'pending').replace(/_/g, ' ')}</span>
         </span>
       </div>
     </button>

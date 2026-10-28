@@ -106,7 +106,7 @@ def _get_app(db: Session, application_id: str) -> Application:
 
 def _ensure_officer_may_act(app: Application, user: User, *, action: str) -> None:
     """Prevent concurrent officer actions once an application is claimed."""
-    if user.role == UserRole.ADMIN:
+    if user.role == UserRole.REGIONAL_OFFICER:
         return
     if app.assigned_officer_id and app.assigned_officer_id != user.id:
         raise ConflictError(
@@ -204,10 +204,10 @@ def mark_under_scrutiny(db: Session, app: Application, actor: User | None = None
 
 
 def start_scrutiny(db: Session, user: User, application_id: str) -> dict:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only officers may start scrutiny.")
     app = _get_app(db, application_id)
-    if app.assigned_officer_id and app.assigned_officer_id != user.id and user.role != UserRole.ADMIN:
+    if app.assigned_officer_id and app.assigned_officer_id != user.id and user.role != UserRole.REGIONAL_OFFICER:
         raise ConflictError(
             "Another officer is assigned to this application. Concurrent review requires admin override."
         )
@@ -253,7 +253,7 @@ def request_clarification(
     description: str,
     finding_ids: list[str] | None = None,
 ) -> dict:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only officers may request clarification.")
     title = (title or "").strip()
     description = (description or "").strip()
@@ -458,7 +458,7 @@ def resolve_finding(
     status: FindingStatus,
     reason: str,
 ) -> Finding:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only officers may resolve findings.")
     if status not in (FindingStatus.RESOLVED, FindingStatus.WAIVED, FindingStatus.ACCEPTED):
         raise UnprocessableError("status must be resolved, waived, or accepted")
@@ -500,14 +500,14 @@ def record_recommendation(
     recommend: bool,
     reason: str,
 ) -> dict:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only officers may record recommendations.")
     reason = (reason or "").strip()
     if len(reason) < 5:
         raise UnprocessableError("A reason of at least 5 characters is required.")
 
     app = _get_app(db, application_id)
-    if app.assigned_officer_id and app.assigned_officer_id != user.id and user.role != UserRole.ADMIN:
+    if app.assigned_officer_id and app.assigned_officer_id != user.id and user.role != UserRole.REGIONAL_OFFICER:
         raise ConflictError("Another officer is assigned; cannot finalize concurrent review.")
 
     target = ApplicationStatus.RECOMMENDED if recommend else ApplicationStatus.REJECTED
@@ -541,7 +541,7 @@ def record_recommendation(
 
 
 def add_note(db: Session, user: User, application_id: str, *, content: str) -> dict:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only officers may add review notes.")
     content = (content or "").strip()
     if len(content) < 3:

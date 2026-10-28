@@ -102,7 +102,7 @@ def resubmit(
 def refresh_summary(
     application_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
 ):
     return workflow_service.refresh_summary(db, user, application_id)
 

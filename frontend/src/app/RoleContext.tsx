@@ -23,7 +23,8 @@ const STORAGE_KEY = 'praman.demo.role'
 
 function readStoredRole(): UserRole {
   const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'applicant' || stored === 'officer' || stored === 'admin') return stored
+  if (stored === 'admin') return 'regional_officer' // legacy
+  if (stored === 'applicant' || stored === 'officer' || stored === 'regional_officer') return stored
   return 'officer'
 }
 

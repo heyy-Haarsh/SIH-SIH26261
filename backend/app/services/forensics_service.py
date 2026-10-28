@@ -323,7 +323,7 @@ def resolve_indicator(
     status: ForensicsIndicatorStatus,
     reason: str,
 ) -> ForensicsIndicator:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only scrutiny officers or admins may resolve forensics indicators.")
     if status not in RESOLVE_STATUSES:
         raise UnprocessableError(

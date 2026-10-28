@@ -81,7 +81,7 @@ export function IntegrationsPage() {
   })).filter((g) => g.items.length)
 
   return (
-    <AppShell title="Integrations" breadcrumbs={['Administrator', 'Integrations']}>
+    <AppShell title="Integrations" breadcrumbs={['Regional Officer', 'Integrations']}>
       <DemoBanner>
         This page shows what is really connected. Endpoints and credentials are set in the server
         configuration and are never shown or edited here. You can switch a connected source off

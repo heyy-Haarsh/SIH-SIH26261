@@ -60,8 +60,8 @@ DEFAULT_UPLOAD_SETTINGS: dict[str, Any] = {
 
 
 def _require_admin(user: User) -> None:
-    if user.role != UserRole.ADMIN:
-        raise ForbiddenError("Administrator role required.")
+    if user.role != UserRole.REGIONAL_OFFICER:
+        raise ForbiddenError("Regional Officer role required.")
 
 
 def _parse_role(value: str) -> UserRole:
@@ -69,7 +69,7 @@ def _parse_role(value: str) -> UserRole:
         return UserRole(value.strip().lower())
     except ValueError as exc:
         raise UnprocessableError(
-            f"Invalid role '{value}'. Allowed: applicant, officer, admin."
+            f"Invalid role '{value}'. Allowed: applicant, officer, regional_officer."
         ) from exc
 
 
@@ -265,7 +265,7 @@ def _normalize_docs(docs: list[dict] | None) -> list[dict]:
 
 
 def list_categories(db: Session, user: User, *, only_active: bool = False) -> list[ApplicationCategory]:
-    if user.role not in (UserRole.ADMIN, UserRole.OFFICER):
+    if user.role not in (UserRole.REGIONAL_OFFICER, UserRole.OFFICER):
         raise ForbiddenError("Insufficient permissions.")
     q = db.query(ApplicationCategory).order_by(ApplicationCategory.code)
     if only_active:
@@ -436,7 +436,7 @@ def list_rules(
     only_active: bool = False,
     synthetic: bool | None = None,
 ) -> list[RegulatoryRule]:
-    if user.role not in (UserRole.ADMIN, UserRole.OFFICER):
+    if user.role not in (UserRole.REGIONAL_OFFICER, UserRole.OFFICER):
         raise ForbiddenError("Insufficient permissions.")
     q = (
         db.query(RegulatoryRule)
@@ -797,7 +797,7 @@ def discard_draft_version(
 
 def rule_usage(db: Session, user: User, rule_id: str) -> dict[str, Any]:
     """How many recorded findings each version of a rule has produced (history is never rewritten)."""
-    if user.role not in (UserRole.ADMIN, UserRole.OFFICER):
+    if user.role not in (UserRole.REGIONAL_OFFICER, UserRole.OFFICER):
         raise ForbiddenError("Insufficient permissions.")
     from sqlalchemy import func
 

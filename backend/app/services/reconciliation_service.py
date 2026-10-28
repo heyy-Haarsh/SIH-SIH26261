@@ -348,7 +348,7 @@ def resolve_item(
     status: ReconciliationItemStatus,
     reason: str,
 ) -> ReconciliationItem:
-    if user.role not in (UserRole.OFFICER, UserRole.ADMIN):
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only scrutiny officers or admins may resolve reconciliation items.")
     if status not in RESOLVE_STATUSES:
         raise UnprocessableError(

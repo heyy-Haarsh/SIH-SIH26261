@@ -24,7 +24,7 @@ def test_officer_cannot_search_audit(client):
 def test_admin_users_crud(client):
     create = client.post(
         "/api/v1/admin/users",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "name": "New Officer",
             "email": "new.officer@praman.local",
@@ -37,13 +37,13 @@ def test_admin_users_crud(client):
 
     patch = client.patch(
         f"/api/v1/admin/users/{uid}",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={"is_active": False, "change_reason": "Offboarding for demo"},
     )
     assert patch.status_code == 200
     assert patch.json()["isActive"] is False
 
-    listing = client.get("/api/v1/admin/users", headers=auth_headers("admin"))
+    listing = client.get("/api/v1/admin/users", headers=auth_headers("regional_officer"))
     assert listing.status_code == 200
     assert any(u["id"] == uid for u in listing.json())
 
@@ -51,7 +51,7 @@ def test_admin_users_crud(client):
 def test_category_crud(client):
     res = client.post(
         "/api/v1/admin/categories",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "code": "DEMO-CAT",
             "name": "Demo Category",
@@ -66,14 +66,14 @@ def test_category_crud(client):
 
     dup = client.post(
         "/api/v1/admin/categories",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={"code": "DEMO-CAT", "name": "Dup"},
     )
     assert dup.status_code in (409, 422)
 
     upd = client.patch(
         f"/api/v1/admin/categories/{cid}",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={"is_active": False, "change_reason": "Disable unused category"},
     )
     assert upd.status_code == 200
@@ -83,7 +83,7 @@ def test_category_crud(client):
 def test_rule_validate_rejects_invented_official(client):
     res = client.post(
         "/api/v1/admin/rules/validate",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "code": "AICTE-FAKE-1",
             "name": "Fake official",
@@ -102,7 +102,7 @@ def test_rule_validate_rejects_invented_official(client):
 def test_rule_version_history_never_overwrites(client):
     create = client.post(
         "/api/v1/admin/rules",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "code": "SYN-RULE-ADMIN-1",
             "name": "Admin test rule",
@@ -121,7 +121,7 @@ def test_rule_version_history_never_overwrites(client):
 
     v2 = client.post(
         f"/api/v1/admin/rules/{rid}/versions",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "version": "v2",
             "definition": {"logic": "missing_mandatory", "params": {"strict": True}, "synthetic": True},
@@ -145,7 +145,7 @@ def test_rule_version_history_never_overwrites(client):
     # Duplicate version id rejected
     dup = client.post(
         f"/api/v1/admin/rules/{rid}/versions",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "version": "v2",
             "definition": {"logic": "missing_mandatory"},
@@ -158,19 +158,19 @@ def test_rule_version_history_never_overwrites(client):
     # Reactivate v1
     react = client.post(
         f"/api/v1/admin/rules/{rid}/versions/v1/reactivate?reason=Rollback%20to%20prior%20params",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
     )
     assert react.status_code == 200, react.text
     assert react.json()["currentVersion"] == "v1"
 
 
 def test_disable_rule(client):
-    rules = client.get("/api/v1/admin/rules", headers=auth_headers("admin"))
+    rules = client.get("/api/v1/admin/rules", headers=auth_headers("regional_officer"))
     assert rules.status_code == 200
     seeded = next(r for r in rules.json() if r["ruleCode"].startswith("SYN-RULE-"))
     res = client.patch(
         f"/api/v1/admin/rules/{seeded['id']}",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={"is_active": False, "change_reason": "Temporarily disable for demo"},
     )
     assert res.status_code == 200
@@ -178,7 +178,7 @@ def test_disable_rule(client):
     # restore
     client.patch(
         f"/api/v1/admin/rules/{seeded['id']}",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={"is_active": True, "change_reason": "Re-enable after demo"},
     )
 
@@ -186,14 +186,14 @@ def test_disable_rule(client):
 def test_settings_reject_secrets_and_update(client):
     bad = client.put(
         "/api/v1/admin/settings/verification",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={"value": {"api_key": "secret"}, "change_reason": "try secret"},
     )
     assert bad.status_code == 422
 
     ok = client.put(
         "/api/v1/admin/settings/verification",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "value": {
                 "enableLiveVerification": False,
@@ -212,7 +212,7 @@ def test_audit_search_filter_and_pagination(client):
     # Generate an auditable admin action
     client.post(
         "/api/v1/admin/users",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
         json={
             "name": "Audit Probe",
             "email": "audit.probe@praman.local",
@@ -221,7 +221,7 @@ def test_audit_search_filter_and_pagination(client):
     )
     res = client.get(
         "/api/v1/admin/audit?action=admin.user&limit=10&offset=0",
-        headers=auth_headers("admin"),
+        headers=auth_headers("regional_officer"),
     )
     assert res.status_code == 200, res.text
     body = res.json()
@@ -232,7 +232,7 @@ def test_audit_search_filter_and_pagination(client):
 
 
 def test_admin_stats(client):
-    res = client.get("/api/v1/admin/stats", headers=auth_headers("admin"))
+    res = client.get("/api/v1/admin/stats", headers=auth_headers("regional_officer"))
     assert res.status_code == 200
     body = res.json()
     assert body["userCount"] >= 3

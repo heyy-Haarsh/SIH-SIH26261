@@ -1,4 +1,4 @@
-export type UserRole = 'applicant' | 'officer' | 'admin'
+export type UserRole = 'applicant' | 'officer' | 'regional_officer'
 
 export type ApplicationStatus =
   | 'draft'

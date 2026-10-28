@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/Input'
 const ROLE_LABELS: Record<UserRole, string> = {
   applicant: 'Institution / Applicant',
   officer: 'Scrutiny Officer',
-  admin: 'System Administrator',
+  regional_officer: 'Regional Officer',
 }
 
 export function TopBar({
@@ -72,7 +72,7 @@ export function TopBar({
           >
             <option value="officer">Scrutiny Officer</option>
             <option value="applicant">Applicant</option>
-            <option value="admin">Administrator</option>
+            <option value="regional_officer">Regional Officer</option>
           </Select>
         </div>
 
