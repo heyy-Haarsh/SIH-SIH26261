@@ -143,10 +143,11 @@ describe('IssuesPanel', () => {
     expect(screen.getByText('Old resolved issue')).toBeTruthy()
   })
 
-  it('opens the document report from a group', () => {
+  it('opens the document report from an expanded finding', () => {
     const onOpen = vi.fn()
     render(<IssuesPanel review={review()} role="officer" onOpenDocument={onOpen} onChanged={() => {}} />)
-    fireEvent.click(screen.getByText(/Preview & report/))
+    fireEvent.click(screen.getByText('Institution name is missing'))
+    fireEvent.click(screen.getByText(/View document/))
     expect(onOpen).toHaveBeenCalledWith('doc-1')
   })
 
@@ -155,7 +156,7 @@ describe('IssuesPanel', () => {
     render(<IssuesPanel review={review()} role="officer" onOpenDocument={() => {}} onChanged={onChanged} />)
     // Expand the issue, then open the resolve control
     fireEvent.click(screen.getByText('Institution name is missing'))
-    fireEvent.click(screen.getByText('Resolve…'))
+    fireEvent.click(screen.getByText('Resolve →'))
     fireEvent.click(screen.getByText('Draft note'))
     expect((screen.getByLabelText('Officer note') as HTMLTextAreaElement).value.length).toBeGreaterThan(5)
     fireEvent.change(screen.getByPlaceholderText(/Explain why this is resolved/), {
@@ -175,7 +176,7 @@ describe('IssuesPanel', () => {
     render(<IssuesPanel review={review()} role="officer" onOpenDocument={() => {}} onChanged={() => {}} />)
     // Expand first, then open the resolve control
     fireEvent.click(screen.getByText('Institution name is missing'))
-    fireEvent.click(screen.getByText('Resolve…'))
+    fireEvent.click(screen.getByText('Resolve →'))
     fireEvent.click(screen.getByText('Mark resolved'))
     expect(screen.getByText(/at least 5 characters/)).toBeTruthy()
     expect(api.resolveFinding).not.toHaveBeenCalled()
@@ -208,6 +209,7 @@ describe('DecisionPanel', () => {
 
   it('prefills the clarification from the suggested plain-language text', async () => {
     render(<DecisionPanel detail={detail} review={review()} role="officer" onChanged={() => {}} />)
+    fireEvent.click(screen.getByText('Request clarification'))
     fireEvent.click(screen.getByText('Use suggested text'))
     const body = screen.getByLabelText('Clarification details') as HTMLTextAreaElement
     expect(body.value).toContain('Please correct the following')
@@ -234,7 +236,8 @@ describe('DecisionPanel', () => {
     }
     render(<DecisionPanel detail={closed} review={r} role="officer" onChanged={() => {}} />)
     expect(screen.getByText('Names do not match.')).toBeTruthy()
-    expect(screen.queryByText('Send clarification request')).toBeNull()
+    expect(screen.queryByText('Request clarification')).toBeNull()
+    expect(screen.queryByText('Mark for decision')).toBeNull()
     expect(screen.queryByText('Recommend')).toBeNull()
   })
 })

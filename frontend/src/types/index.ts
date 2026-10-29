@@ -1036,6 +1036,65 @@ export interface DocumentReport {
   disclaimer: string
 }
 
+
+export interface IssuerRegistryRecord {
+  id: string
+  docType: string
+  certificateNumber: string
+  issuerName: string
+  holderName: string
+  contentHash?: string | null
+  status: string
+  notes: string
+  isDemo: boolean
+}
+
+export interface IssuerVerifyRequestEcho {
+  method: string
+  endpoint: string
+  body: {
+    docType?: string | null
+    certificateNumber: string
+    holderName?: string | null
+    contentHash?: string | null
+    applicationId?: string | null
+    documentId?: string | null
+  }
+}
+
+export interface IssuerVerifyResult {
+  result: string
+  authentic: boolean
+  message: string
+  confidence: string
+  checks: {
+    numberFound: boolean
+    holderMatch: boolean
+    hashMatch: boolean
+    notRevoked: boolean
+    docTypeMatch: boolean
+  }
+  matchedRecord: IssuerRegistryRecord | null
+  latencyMs: number
+  disclaimer: string
+  endpoint: string
+  verifiedAt: string
+  request: IssuerVerifyRequestEcho
+  verifyEventId?: string
+}
+
+export interface IssuerVerifyPayloadPreview {
+  docType: string
+  certificateNumber: string
+  holderName: string
+  issuerNameHint?: string
+  contentHash?: string
+  applicationId: string
+  documentId: string
+  extractedFields: Record<string, string>
+  requirementCode?: string
+}
+
 export interface HandbookReferenceAdmin {
   id: string
   referenceKey: string

@@ -1,10 +1,13 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { RoleProvider, useRole } from '@/app/RoleContext'
+import { RoleProvider } from '@/app/RoleContext'
 import { RequireRole } from '@/app/RequireRole'
-import { ROLE_HOME } from '@/lib/nav'
 import { ToastProvider } from '@/components/ui/Toast'
 import { PageSkeleton } from '@/components/ui/Skeleton'
+
+const HomePage = lazy(() =>
+  import('@/pages/HomePage').then((m) => ({ default: m.HomePage })),
+)
 
 // ── Lazy Loaded Pages for Code Splitting & Smooth Transitions ───────────────
 
@@ -95,16 +98,11 @@ const DelegationPage = lazy(() =>
   import('@/pages/admin/DelegationPage').then((m) => ({ default: m.DelegationPage })),
 )
 
-function RoleHomeRedirect() {
-  const { role } = useRole()
-  return <Navigate to={ROLE_HOME[role]} replace />
-}
-
 function AppRoutes() {
   return (
     <Suspense fallback={<PageSkeleton />}>
       <Routes>
-        <Route path="/" element={<RoleHomeRedirect />} />
+        <Route path="/" element={<HomePage />} />
 
         {/* Scrutiny Officer */}
         <Route element={<RequireRole role="officer" />}>

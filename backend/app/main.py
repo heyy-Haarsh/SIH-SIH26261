@@ -12,6 +12,7 @@ from app.api.routes import (
     extraction,
     forensics,
     health,
+    issuer_registry,
     notifications,
     reconciliation,
     scrutiny,
@@ -22,7 +23,14 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, init_db
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.seed import ensure_regional_demo_users, seed_if_empty
+from app.core.seed import (
+    ensure_regional_demo_users,
+    ensure_demo_image_types,
+    ensure_site_photo_requirements,
+    ensure_upload_paths_repaired,
+    seed_if_empty,
+)
+from app.services.issuer_registry_service import ensure_issuer_registry_seed
 
 
 @asynccontextmanager
@@ -40,6 +48,10 @@ async def lifespan(_: FastAPI):
         from app.services import category_config_service
 
         category_config_service.ensure_baseline(db)
+        ensure_site_photo_requirements(db)
+        ensure_demo_image_types(db)
+        ensure_issuer_registry_seed(db)
+        ensure_upload_paths_repaired(db)
         runtime_config.load_from_db(db)
     finally:
         db.close()
@@ -74,6 +86,7 @@ def create_app() -> FastAPI:
     application.include_router(forensics.router, prefix="/api/v1")
     application.include_router(workflow.router, prefix="/api/v1")
     application.include_router(doc_verification.router, prefix="/api/v1")
+    application.include_router(issuer_registry.router, prefix="/api/v1")
     application.include_router(admin.router, prefix="/api/v1")
     application.include_router(admin_config.router, prefix="/api/v1")
     application.include_router(notifications.router, prefix="/api/v1")

@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.integrations.storage import resolve_upload_file
 from app.core.database import SessionLocal, get_db
 from app.core.errors import NotFoundError
 from app.core.security import (
@@ -182,6 +183,8 @@ def get_document_report(
     return document_report_service.build_document_report(db, _app(db, application_id), document_id)
 
 
+
+
 @router.get("/documents/{document_id}/file")
 def get_document_file(
     document_id: str,
@@ -199,9 +202,9 @@ def get_document_file(
     chosen = versions.get(version) if version is not None else doc.latest_version
     if chosen is None:
         raise NotFoundError("Document version not found.")
-    path = Path(chosen.storage_path).resolve()
     root = get_settings().upload_path.resolve()
-    if root not in path.parents or not path.is_file():
+    path = resolve_upload_file(chosen.storage_path, root)
+    if path is None:
         raise NotFoundError("The stored file is no longer available.")
     return FileResponse(
         path,

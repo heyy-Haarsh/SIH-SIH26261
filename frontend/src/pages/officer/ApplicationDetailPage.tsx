@@ -1,18 +1,10 @@
 /**
- * Scrutiny Workspace — three-panel layout.
+ * Scrutiny Workspace — two-panel layout (reference: decluttered officer view).
  *
- * Panel A (left  250px)  — Application details + document checklist
- * Panel B (center flex)  — Four-tab investigation workspace:
- *                           Findings | Authenticity | Clarifications | History
- * Panel C (right 320px)  — Status summary + quick actions + decision form
+ * Center — Tabs: Findings | Documents | Authenticity | Clarifications | History
+ * Right  (~300px) — Overview + review status + decision / next actions
  *
- * Three slide-over drawers (only one open at a time):
- *   "doc"    — Document Evidence Viewer  (opened from Panel A)
- *   "finding"— Finding Details           (opened from Findings tab)
- *   "clarify"— Clarification Composer    (opened from Panel C)
- *
- * All existing business logic, APIs, permissions, and audit behaviour
- * are preserved exactly. No functionality has been removed.
+ * Drawers: doc viewer, finding detail, clarification composer.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -31,7 +23,6 @@ import {
 import { AppShell } from '@/components/layout/AppShell'
 import { Tabs } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonDetailLayout } from '@/components/ui/Skeleton'
 import { SlideOver } from '@/components/ui/SlideOver'
@@ -44,7 +35,7 @@ import { IssuesPanel } from '@/components/scrutiny/IssuesPanel'
 import { ReconciliationPanel } from '@/components/scrutiny/ReconciliationPanel'
 import { CorrectionTable, rowsFromOfficerText } from '@/components/shared/CorrectionTable'
 import { errorText } from '@/components/scrutiny/scrutinyUi'
-import { formatDate, formatDateTime, formatRelative } from '@/lib/format'
+import { formatDate, formatRelative } from '@/lib/format'
 import { useRole } from '@/app/RoleContext'
 import { useApplicationDetail } from '@/hooks/useApplicationDetail'
 import { useRefreshable } from '@/hooks/useRefreshable'
@@ -56,8 +47,8 @@ import type {
 } from '@/types'
 
 // ── Tab IDs for the center panel ─────────────────────────────────────────────
-type CenterTab = 'findings' | 'authenticity' | 'clarifications' | 'history'
-const CENTER_TABS: CenterTab[] = ['findings', 'authenticity', 'clarifications', 'history']
+type CenterTab = 'findings' | 'documents' | 'authenticity' | 'clarifications' | 'history'
+const CENTER_TABS: CenterTab[] = ['findings', 'documents', 'authenticity', 'clarifications', 'history']
 
 // ── Drawer identifiers ────────────────────────────────────────────────────────
 type DrawerId = 'doc' | 'finding' | 'clarify' | null
@@ -107,6 +98,8 @@ export function ApplicationDetailPage() {
   const [openDocId, setOpenDocId] = useState<string | null>(null)
   // For Finding drawer: store the selected issue key
   const [focusedIssueKey, setFocusedIssueKey] = useState<string | null>(null)
+  /** Issue keys to pre-check when opening the clarification composer. */
+  const [clarifyIssueKeys, setClarifyIssueKeys] = useState<string[]>([])
 
   function openDocDrawer(docId: string) {
     setOpenDocId(docId)
@@ -116,7 +109,8 @@ export function ApplicationDetailPage() {
     setFocusedIssueKey(issueKey)
     setDrawer('finding')
   }
-  function openClarifyDrawer() {
+  function openClarifyDrawer(issueKeys?: string[]) {
+    setClarifyIssueKeys(issueKeys ?? [])
     setDrawer('clarify')
   }
   function closeDrawer() {
@@ -217,6 +211,7 @@ export function ApplicationDetailPage() {
 
   const CENTER_TAB_CONFIG = [
     { id: 'findings', label: 'Findings', count: findingsBadge },
+    { id: 'documents', label: 'Documents', count: detail.documents.length || undefined },
     { id: 'authenticity', label: 'Authenticity' },
     {
       id: 'clarifications', label: 'Clarifications',
@@ -241,10 +236,17 @@ export function ApplicationDetailPage() {
     setBusy(true); setWorkflowMsg(null); setWorkflowErr(false)
     try {
       await api.runApplicationDocVerification(role, detail!.id)
-      setWorkflowMsg('Issuer check complete. Results are from the local demo issuer — not an official authority.')
+      setWorkflowMsg(
+        'Batch issuer adapters finished. For a live Network-tab demo, open Authenticity → Live issuer registry verify.',
+      )
       await refreshAll()
     } catch (err) {
-      setWorkflowMsg(errorText(err, 'Issuer check failed. Is the simulated issuer running on port 8001?'))
+      setWorkflowMsg(
+        errorText(
+          err,
+          'Batch issuer check failed. Use Authenticity → Live issuer registry verify (no port 8001 needed).',
+        ),
+      )
       setWorkflowErr(true)
     } finally { setBusy(false) }
   }
@@ -269,7 +271,7 @@ export function ApplicationDetailPage() {
       description="Evidence-first case workspace"
       breadcrumbs={[roleLabel, 'Applications', detail.applicationNumber]}
     >
-      {/* ── Slim application header ──────────────────────────────────────── */}
+      {/* ── Application header ───────────────────────────────────────────── */}
       <div
         className="mb-3 overflow-hidden rounded-xl"
         style={{ background: WHITE, border: `1px solid ${BDR}` }}
@@ -283,42 +285,43 @@ export function ApplicationDetailPage() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-          {/* Back + title */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               onClick={() => navigate(-1)}
               className="inline-flex shrink-0 items-center gap-1 text-sm transition-opacity hover:opacity-70"
               style={{ color: MUT }}
+              aria-label="Back"
             >
               <ArrowLeft size={14} />
             </button>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-bold" style={{ color: INK }}>
-                  {detail.institutionName}
-                </span>
+                <h1 className="text-lg font-bold tracking-tight" style={{ color: INK }}>
+                  {detail.applicationNumber}
+                </h1>
                 <StatusDot status={detail.status} label={detail.status.replace(/_/g, ' ')} />
                 {typeof detail.priorityScore === 'number' && (
                   <span
-                    className="rounded-md border px-2 py-0.5 text-[11px]"
-                    style={{ border: `1px solid ${BDR_STRONG}`, color: MUT }}
+                    className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                    style={{ background: '#F0FDF4', color: '#166534' }}
                     title="Priority score — ordering aid only"
                   >
                     Score {detail.priorityScore}
                   </span>
                 )}
               </div>
-              <p className="text-[11px]" style={{ color: INK2 }}>
+              <p className="mt-0.5 text-sm font-medium" style={{ color: INK2 }}>
+                {detail.institutionName}
+              </p>
+              <p className="text-[11px]" style={{ color: MUT }}>
                 {detail.category} · {detail.programName} · AY {detail.academicYear}
-                {' '}· #{detail.applicationNumber}
-                {detail.assignedOfficer && ` · ${detail.assignedOfficer}`}
+                {detail.submittedAt ? ` · Submitted ${formatDate(detail.submittedAt)}` : ''}
               </p>
             </div>
           </div>
 
-          {/* Header actions */}
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {source === 'api' && (
               <>
@@ -338,7 +341,6 @@ export function ApplicationDetailPage() {
           </div>
         </div>
 
-        {/* Workflow feedback */}
         {workflowMsg && (
           <div
             role="status"
@@ -354,37 +356,22 @@ export function ApplicationDetailPage() {
         )}
       </div>
 
-      {/* ── Three-panel workspace ─────────────────────────────────────────── */}
+      {/* ── Two-panel workspace ──────────────────────────────────────────── */}
       <div
         className="grid overflow-hidden rounded-xl"
         style={{
-          gridTemplateColumns: '250px minmax(0,1fr) 340px',
-          height: 'calc(100vh - 220px)',
+          gridTemplateColumns: 'minmax(0,1fr) 300px',
+          height: 'calc(100vh - 210px)',
           minHeight: '520px',
           border: `1px solid ${BDR}`,
           background: WHITE,
         }}
       >
-        {/* ══ PANEL A — Application context + document checklist ══ */}
-        <PanelA
-          detail={detail}
-          review={data}
-          source={source}
-          missingDocs={missingDocs}
-          onOpenDocument={openDocDrawer}
-        />
-
-        {/* ══ PANEL B — Investigation workspace ══ */}
-        <div
-          className="flex flex-col overflow-hidden"
-          style={{ borderLeft: `1px solid ${BDR}`, borderRight: `1px solid ${BDR}` }}
-        >
-          {/* Tab bar */}
+        <div className="flex flex-col overflow-hidden" style={{ borderRight: `1px solid ${BDR}` }}>
           <div className="shrink-0 px-4 pt-1.5" style={{ borderBottom: `1px solid ${BDR}` }}>
             <Tabs active={tab} onChange={changeTab} tabs={CENTER_TAB_CONFIG} />
           </div>
 
-          {/* Tab body */}
           <div className="flex-1 overflow-y-auto p-4">
             {review.error && !data && source === 'api' && (
               <p className="mb-3 rounded px-3 py-2 text-xs" role="alert"
@@ -393,7 +380,6 @@ export function ApplicationDetailPage() {
               </p>
             )}
 
-            {/* Findings = rule checks + cross-doc + issues */}
             {tab === 'findings' && (
               <FindingsTab
                 detail={detail}
@@ -404,7 +390,17 @@ export function ApplicationDetailPage() {
                 source={source}
                 onOpenDocument={openDocDrawer}
                 onOpenFinding={openFindingDrawer}
+                onAskClarification={(keys) => openClarifyDrawer(keys)}
                 onChanged={refreshAll}
+              />
+            )}
+
+            {tab === 'documents' && (
+              <DocumentsTab
+                detail={detail}
+                source={source}
+                missingDocs={missingDocs}
+                onOpenDocument={openDocDrawer}
               />
             )}
 
@@ -413,7 +409,13 @@ export function ApplicationDetailPage() {
             )}
 
             {tab === 'clarifications' && (
-              <ClarificationsTab detail={detail} role={role} onChanged={refreshAll} />
+              <ClarificationsTab
+                detail={detail}
+                role={role}
+                canRequest={canAct && !['recommended', 'rejected', 'approved'].includes(detail.status)}
+                onRequestClarification={() => openClarifyDrawer()}
+                onChanged={refreshAll}
+              />
             )}
 
             {tab === 'history' && (
@@ -422,7 +424,6 @@ export function ApplicationDetailPage() {
           </div>
         </div>
 
-        {/* ══ PANEL C — Summary + actions + decision ══ */}
         <PanelC
           detail={detail}
           review={data}
@@ -433,22 +434,15 @@ export function ApplicationDetailPage() {
         />
       </div>
 
-      <SlideOver
-        open={drawer === 'doc' && openDocId !== null && source === 'api'}
-        onClose={closeDrawer}
-        title="Document viewer"
-        width="max-w-[640px]"
-      >
-        {openDocId && source === 'api' && (
-          <DocumentReportPanel
-            role={role}
-            applicationId={detail.id}
-            documentId={openDocId}
-            onClose={closeDrawer}
-            onChanged={refreshAll}
-          />
-        )}
-      </SlideOver>
+      {drawer === 'doc' && openDocId !== null && source === 'api' && (
+        <DocumentReportPanel
+          role={role}
+          applicationId={detail.id}
+          documentId={openDocId}
+          onClose={closeDrawer}
+          onChanged={refreshAll}
+        />
+      )}
 
       {/* ══ DRAWER 2 — Finding Details ══ */}
       <SlideOver
@@ -487,8 +481,12 @@ export function ApplicationDetailPage() {
             detail={detail}
             review={data}
             role={role}
+            initialIssueKeys={clarifyIssueKeys}
             onClose={closeDrawer}
-            onChanged={refreshAll}
+            onChanged={async () => {
+              await refreshAll()
+              changeTab('clarifications')
+            }}
           />
         )}
         {!data && (
@@ -502,138 +500,101 @@ export function ApplicationDetailPage() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Panel A — Application context + document checklist
+// Documents tab (moved out of the old left rail)
 // ─────────────────────────────────────────────────────────────────────────────
-function PanelA({
+function DocumentsTab({
   detail,
-  review,
   source,
   missingDocs,
   onOpenDocument,
 }: {
   detail: ApplicationDetail
-  review: ScrutinyReview | null | undefined
   source: string
-  missingDocs: string[]
+  missingDocs: Array<{ code: string; name: string; mandatory: boolean }>
   onOpenDocument: (docId: string) => void
 }) {
-  return (
-    <div className="flex flex-col overflow-y-auto" style={{ background: SURF }}>
-      {/* Application details */}
-      <section className="shrink-0 px-4 py-3.5" style={{ borderBottom: `1px solid ${BDR}` }}>
-        <h3 className="mb-2.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: MUT }}>
-          Application
-        </h3>
-        <dl className="space-y-1.5">
-          {([
-            ['ID', `#${detail.applicationNumber}`],
-            ['Institution', detail.institutionName],
-            ['Category', detail.category],
-            ['Status', detail.status.replace(/_/g, ' ')],
-            ['Officer', detail.assignedOfficer ?? 'Unassigned'],
-            ['Submitted', formatDate(detail.submittedAt)],
-          ] as [string, string][]).map(([label, value]) => (
-            <div key={label} className="flex gap-2 text-[11px]">
-              <dt className="w-[72px] shrink-0" style={{ color: MUT }}>{label}</dt>
-              <dd className="min-w-0 truncate font-medium" style={{ color: INK }} title={value}>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+  const missingLabels = missingDocs.map((m) => m.name || m.code)
 
-      {/* Missing items */}
-      {(missingDocs.length > 0 || (review && review.openIssueCount > 0)) && (
-        <section className="shrink-0 px-4 py-3" style={{ borderBottom: `1px solid ${BDR}` }}>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest" style={{ color: MUT }}>
-            Outstanding
-          </h3>
-          {missingDocs.length > 0 && (
-            <div className="mb-1.5 flex items-start gap-1.5">
-              <AlertTriangle size={11} className="mt-0.5 shrink-0" style={{ color: '#B45309' }} />
-              <p className="text-[11px]" style={{ color: '#92400E' }}>
-                {missingDocs.length} missing document{missingDocs.length !== 1 ? 's' : ''}:
-                {' '}{missingDocs.join(', ')}
-              </p>
-            </div>
-          )}
-          {review && review.openIssueCount > 0 && (
-            <div className="flex items-center gap-1.5">
-              <AlertTriangle size={11} className="shrink-0" style={{ color: '#991B1B' }} />
-              <p className="text-[11px]" style={{ color: '#991B1B' }}>
-                {review.openIssueCount} open finding{review.openIssueCount !== 1 ? 's' : ''}
-              </p>
-            </div>
-          )}
-        </section>
+  return (
+    <div className="space-y-4">
+      {missingLabels.length > 0 && (
+        <div
+          className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-xs"
+          style={{ background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}
+        >
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <p>
+            <span className="font-semibold">{missingLabels.length} missing</span>
+            {' — '}{missingLabels.join(', ')}
+          </p>
+        </div>
       )}
 
-      {/* Document checklist */}
-      <section className="flex-1 overflow-y-auto px-4 py-3">
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest" style={{ color: MUT }}>
-          Documents ({detail.documents.length})
-        </h3>
+      {detail.documents.length === 0 ? (
+        <EmptyCard
+          icon={<FileText size={20} style={{ color: MUT }} />}
+          message="No documents uploaded yet."
+        />
+      ) : (
+        <ul className="divide-y rounded-xl overflow-hidden" style={{ border: `1px solid ${BDR}` }}>
+          {detail.documents.map((doc) => {
+            const hasFindings = detail.findings?.some((f) => f.documentId === doc.id)
+            return (
+              <li key={doc.id} style={{ borderColor: BDR }}>
+                <button
+                  type="button"
+                  disabled={source !== 'api'}
+                  onClick={() => onOpenDocument(doc.id)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#FAFAFA] disabled:cursor-default"
+                >
+                  <DocStatusIcon doc={doc} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium" style={{ color: INK }}>
+                      {doc.requirementName ?? doc.fileName ?? doc.id}
+                    </p>
+                    <p className="truncate text-[11px]" style={{ color: MUT }}>
+                      {doc.fileName && doc.requirementName ? doc.fileName : (doc.status ?? '')}
+                    </p>
+                  </div>
+                  {hasFindings && (
+                    <span
+                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                      style={{ background: '#FEF2F2', color: '#991B1B' }}
+                    >
+                      Issues
+                    </span>
+                  )}
+                  <span className="shrink-0 text-[11px] font-medium" style={{ color: '#1D4ED8' }}>
+                    View →
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
-        {detail.documents.length === 0 ? (
-          <p className="text-[11px]" style={{ color: MUT }}>No documents uploaded.</p>
-        ) : (
+      {detail.requirements && detail.requirements.some(
+        (r) => r.mandatory && !detail.documents.find((d) => d.requirementCode === r.code),
+      ) && (
+        <div>
+          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest" style={{ color: MUT }}>
+            Not uploaded
+          </h3>
           <ul className="space-y-1">
-            {detail.documents.map((doc) => {
-              const hasFindings = detail.findings?.some((f) => f.documentId === doc.id)
-              return (
-                <li key={doc.id}>
-                  <button
-                    type="button"
-                    disabled={source !== 'api'}
-                    onClick={() => onOpenDocument(doc.id)}
-                    className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white disabled:cursor-default"
-                    style={{ minHeight: '44px' }}
-                    title={source !== 'api' ? 'Document viewer requires an API application' : undefined}
-                  >
-                    <DocStatusIcon doc={doc} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-medium leading-tight" style={{ color: INK }}>
-                        {doc.fileName ?? doc.requirementName ?? doc.id}
-                      </p>
-                      <p className="text-[10px]" style={{ color: MUT }}>
-                        {doc.requirementName && doc.fileName ? doc.requirementName : ''}
-                      </p>
-                    </div>
-                    {hasFindings && (
-                      <span
-                        className="mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
-                        style={{ background: '#FEF2F2', color: '#991B1B' }}
-                        title="Has related findings"
-                      >
-                        !
-                      </span>
-                    )}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-
-        {/* Requirements not yet uploaded */}
-        {detail.requirements && (
-          <div className="mt-3 space-y-1">
             {detail.requirements
               .filter((r) => r.mandatory && !detail.documents.find((d) => d.requirementCode === r.code))
               .map((r) => (
-                <div key={r.code} className="flex items-center gap-2 rounded-lg px-2 py-2"
-                  style={{ minHeight: '44px' }}>
+                <li key={r.code} className="flex items-center gap-2 rounded-lg px-3 py-2"
+                  style={{ background: SURF }}>
                   <FileQuestion size={13} className="shrink-0" style={{ color: MUT }} />
-                  <p className="min-w-0 flex-1 truncate text-[11px]" style={{ color: MUT }}>
-                    {r.name}
-                  </p>
-                  <span className="text-[10px] font-medium" style={{ color: '#B45309' }}>
-                    Missing
-                  </span>
-                </div>
+                  <p className="min-w-0 flex-1 truncate text-[12px]" style={{ color: INK2 }}>{r.name}</p>
+                  <span className="text-[10px] font-medium" style={{ color: '#B45309' }}>Missing</span>
+                </li>
               ))}
-          </div>
-        )}
-      </section>
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
@@ -659,49 +620,14 @@ function PanelC({
   const openFindings = review?.openIssueCount ?? 0
   const missingDocs = review?.missingDocuments.length ?? 0
   const openClarifs = (detail.deficiencies ?? []).filter((d) => d.status === 'open').length
+  const resolved = review?.resolvedIssueCount ?? 0
+  const total = openFindings + resolved
+  const pct = total > 0 ? Math.round((resolved / total) * 100) : 0
 
   return (
-    <div className="flex flex-col overflow-hidden h-full">
-      {/* Status summary */}
-      <section
-        className="shrink-0 px-4 py-3"
-        style={{ borderBottom: `1px solid ${BDR}`, background: SURF }}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: MUT }}>
-            Review Status
-          </h3>
-          <span
-            className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-            style={{
-              background: detail.status === 'recommended' ? '#F0FDF4' : detail.status === 'rejected' ? '#FEF2F2' : '#EFF6FF',
-              color: detail.status === 'recommended' ? '#166534' : detail.status === 'rejected' ? '#991B1B' : '#1D4ED8',
-            }}
-          >
-            {detail.statusLabel ?? detail.status.replace(/_/g, ' ')}
-          </span>
-        </div>
-        <div className="space-y-1.5">
-          <SummaryRow
-            label="Open findings"
-            value={openFindings}
-            tone={openFindings > 0 ? 'warn' : 'ok'}
-          />
-          <SummaryRow
-            label="Missing documents"
-            value={missingDocs}
-            tone={missingDocs > 0 ? 'warn' : 'ok'}
-          />
-          <SummaryRow
-            label="Pending clarifications"
-            value={openClarifs}
-            tone={openClarifs > 0 ? 'warn' : 'ok'}
-          />
-        </div>
-      </section>
-
-      {/* DecisionPanel with full tabbed navigation & popup modal support */}
-      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+    <div className="flex flex-col overflow-hidden h-full" style={{ background: SURF }}>
+      {/* Next actions sit where Application overview used to — opens dialogs */}
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0" style={{ background: WHITE }}>
         <DecisionPanel
           detail={detail}
           review={review ?? undefined}
@@ -710,6 +636,50 @@ function PanelC({
           onRequestClarificationDrawer={onRequestClarification}
         />
       </div>
+
+      <section className="shrink-0 px-4 py-3.5" style={{ borderTop: `1px solid ${BDR}`, background: WHITE }}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: MUT }}>
+            Review status
+          </h3>
+          <span className="text-[11px] font-semibold" style={{ color: INK2 }}>{pct}%</span>
+        </div>
+        <div
+          className="mb-3 h-1.5 w-full overflow-hidden rounded-full"
+          style={{ background: '#E5E7EB' }}
+          aria-hidden
+        >
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${pct}%`, background: pct === 100 ? '#16A34A' : '#1D4ED8' }}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <StatChip label="Open" value={openFindings} color="#991B1B" bg="#FEF2F2" />
+          <StatChip label="Missing" value={missingDocs} color="#B45309" bg="#FFFBEB" />
+          <StatChip label="Pending" value={openClarifs} color="#1D4ED8" bg="#EFF6FF" />
+          <StatChip label="Resolved" value={resolved} color="#166534" bg="#F0FDF4" />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function StatChip({
+  label,
+  value,
+  color,
+  bg,
+}: {
+  label: string
+  value: number
+  color: string
+  bg: string
+}) {
+  return (
+    <div className="rounded-lg px-2.5 py-2" style={{ background: bg }}>
+      <p className="text-[18px] font-bold leading-none" style={{ color }}>{value}</p>
+      <p className="mt-1 text-[10px] font-medium" style={{ color }}>{label}</p>
     </div>
   )
 }
@@ -726,6 +696,7 @@ function FindingsTab({
   source,
   onOpenDocument,
   onOpenFinding,
+  onAskClarification,
   onChanged,
 }: {
   detail: ApplicationDetail
@@ -736,19 +707,32 @@ function FindingsTab({
   source: string
   onOpenDocument: (docId: string) => void
   onOpenFinding: (issueKey: string) => void
+  onAskClarification: (issueKeys: string[]) => void
   onChanged: () => Promise<unknown> | void
 }) {
+  void onOpenFinding
   const [section, setSection] = useState<'issues' | 'rules' | 'cross'>('issues')
 
   const ruleFailCount = ruleChecks
     ? ruleChecks.filter((r) => r.state === 'failed' || r.state === 'warning').length
     : 0
   const mismatchCount = detail.discrepancies.filter((d) => d.outcome !== 'MATCH').length
+  const openFindings = review?.openIssueCount ?? 0
+  const missingCount = review?.missingDocuments.length ?? 0
+  const pendingClarifs = (detail.deficiencies ?? []).filter((d) => d.status === 'open').length
+  const resolved = review?.resolvedIssueCount ?? 0
 
   return (
     <div className="space-y-4">
-      {/* Sub-section pills */}
-      <div className="flex flex-wrap gap-2">
+      {/* Stat strip — same colors as existing severity palette */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <FindingsStat label="Open issues" value={openFindings} color="#991B1B" bg="#FEF2F2" />
+        <FindingsStat label="Missing documents" value={missingCount} color="#B45309" bg="#FFFBEB" />
+        <FindingsStat label="Pending clarifications" value={pendingClarifs} color="#1D4ED8" bg="#EFF6FF" />
+        <FindingsStat label="Resolved issues" value={resolved} color="#166534" bg="#F0FDF4" />
+      </div>
+
+      <div className="flex flex-wrap gap-1 border-b" style={{ borderColor: BDR }}>
         {([
           ['issues', 'Findings', review?.openIssueCount],
           ['rules', 'Rule checks', ruleFailCount || undefined],
@@ -758,21 +742,16 @@ function FindingsTab({
             key={id}
             type="button"
             onClick={() => setSection(id)}
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium transition-colors"
             style={{
-              background: section === id ? INK : '#F0F0F0',
-              color: section === id ? '#FFFFFF' : INK2,
+              color: section === id ? INK : MUT,
+              borderBottom: section === id ? `2px solid ${INK}` : '2px solid transparent',
+              marginBottom: '-1px',
             }}
           >
             {label}
             {count != null && count > 0 && (
-              <span
-                className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
-                style={{
-                  background: section === id ? 'rgba(255,255,255,0.25)' : '#E0E0E0',
-                  color: section === id ? '#FFFFFF' : '#555555',
-                }}
-              >
+              <span className="text-[11px] font-semibold" style={{ color: section === id ? '#991B1B' : MUT }}>
                 {count}
               </span>
             )}
@@ -780,13 +759,13 @@ function FindingsTab({
         ))}
       </div>
 
-      {/* Issues (open findings from IssuesPanel) */}
       {section === 'issues' && (
         review ? (
           <IssuesPanel
             review={review}
             role={role}
             onOpenDocument={onOpenDocument}
+            onAskClarification={onAskClarification}
             onChanged={onChanged}
           />
         ) : (
@@ -797,7 +776,6 @@ function FindingsTab({
         )
       )}
 
-      {/* Rule checks */}
       {section === 'rules' && (
         ruleChecksLoading ? (
           <p className="text-sm" style={{ color: MUT }}>Loading rule checks…</p>
@@ -813,34 +791,33 @@ function FindingsTab({
         )
       )}
 
-      {/* Cross-document */}
       {section === 'cross' && (
         <div>
-          <div
-            className="mb-3 rounded-xl px-4 py-2.5 text-xs leading-relaxed"
-            style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', color: '#0369A1' }}
-          >
-            <strong>Note:</strong> Mismatches compare extracted fields across documents.
-            They do not imply fraud or determine the review outcome.
-          </div>
+          <p className="mb-3 text-xs" style={{ color: MUT }}>
+            Mismatches compare extracted fields across documents. They do not imply fraud.
+          </p>
           <ReconciliationPanel detail={detail} role={role} onChanged={onChanged} />
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* Limitations */}
-      {section === 'issues' && review && review.limitations.length > 0 && (
-        <div
-          className="rounded-xl px-4 py-3"
-          style={{ background: SURF, border: `1px solid ${BDR_STRONG}` }}
-        >
-          <h4 className="text-xs font-semibold mb-1" style={{ color: INK2 }}>
-            What this review could not check
-          </h4>
-          <ul className="list-disc pl-4 space-y-0.5 text-[11px]" style={{ color: MUT }}>
-            {review.limitations.map((l) => <li key={l}>{l}</li>)}
-          </ul>
-        </div>
-      )}
+function FindingsStat({
+  label,
+  value,
+  color,
+  bg,
+}: {
+  label: string
+  value: number
+  color: string
+  bg: string
+}) {
+  return (
+    <div className="rounded-xl px-3 py-3" style={{ background: bg }}>
+      <p className="text-2xl font-bold leading-none tabular-nums" style={{ color }}>{value}</p>
+      <p className="mt-1.5 text-[11px] font-medium leading-snug" style={{ color }}>{label}</p>
     </div>
   )
 }
@@ -993,24 +970,36 @@ function ClarificationComposerDrawer({
   detail,
   review,
   role,
+  initialIssueKeys = [],
   onClose,
   onChanged,
 }: {
   detail: ApplicationDetail
   review: ScrutinyReview
   role: string
+  initialIssueKeys?: string[]
   onClose: () => void
   onChanged: () => Promise<unknown> | void
 }) {
-  const [title, setTitle] = useState('Clarification required')
-  const [body, setBody] = useState(review.decision?.clarificationDraftBody ?? '')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
-
   const clarifiable = review.issueGroups.flatMap((g) =>
     g.issues.filter((i) => i.status === 'open' && i.findingIds.length > 0 && i.severity !== 'info'),
   )
+  const draftTitle = review.decision?.clarificationDraftTitle
+  const draftBody = review.decision?.clarificationDraftBody ?? ''
+
+  const [title, setTitle] = useState(draftTitle || 'Clarification required')
+  const [body, setBody] = useState(draftBody)
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    if (initialIssueKeys.length > 0) {
+      return new Set(initialIssueKeys.filter((k) => clarifiable.some((i) => i.key === k)))
+    }
+    // Prefer all open findings when a draft exists so one click can send.
+    if (draftBody) return new Set(clarifiable.map((i) => i.key))
+    return new Set()
+  })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+
   const chosen = clarifiable.filter((i) => selected.has(i.key))
   const chosenFindingIds = Array.from(new Set(chosen.flatMap((i) => i.findingIds)))
 
@@ -1034,7 +1023,7 @@ function ClarificationComposerDrawer({
       })
       setMsg({ tone: 'ok', text: 'Clarification sent. The application is now waiting for the applicant.' })
       await onChanged()
-      setTimeout(onClose, 1500)
+      setTimeout(onClose, 1200)
     } catch (err) {
       setMsg({ tone: 'error', text: errorText(err, 'Could not send clarification') })
     } finally { setBusy(false) }
@@ -1042,12 +1031,32 @@ function ClarificationComposerDrawer({
 
   return (
     <div className="space-y-4">
-      {/* Findings selector */}
+      <p className="text-xs leading-relaxed" style={{ color: INK2 }}>
+        Write plain instructions for the applicant. Linking findings marks them as
+        “clarification requested” until they respond and resubmit.
+      </p>
+
       {clarifiable.length > 0 && (
         <div>
-          <p className="mb-2 text-[11px] font-semibold" style={{ color: INK }}>
-            Findings covered ({chosen.length} of {clarifiable.length} selected)
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold" style={{ color: INK }}>
+              Findings covered ({chosen.length} of {clarifiable.length})
+            </p>
+            <button
+              type="button"
+              className="text-[11px] font-medium hover:underline"
+              style={{ color: '#1D4ED8' }}
+              onClick={() =>
+                setSelected(
+                  selected.size === clarifiable.length
+                    ? new Set()
+                    : new Set(clarifiable.map((i) => i.key)),
+                )
+              }
+            >
+              {selected.size === clarifiable.length ? 'Clear all' : 'Select all'}
+            </button>
+          </div>
           <fieldset
             className="rounded-lg p-2 space-y-1.5 max-h-44 overflow-y-auto"
             style={{ border: `1px solid ${BDR_STRONG}` }}
@@ -1067,21 +1076,17 @@ function ClarificationComposerDrawer({
               </label>
             ))}
           </fieldset>
-          <p className="mt-1 text-[10px]" style={{ color: MUT }}>
-            Selected findings move to "clarification requested" and return to "under review" when answered.
-          </p>
         </div>
       )}
 
-      {/* Wand: use suggested text */}
-      {review.decision?.clarificationDraftBody && (
+      {draftBody && (
         <Button
           size="sm"
           variant="outline"
           leftIcon={<Wand2 size={13} />}
           onClick={() => {
-            setTitle(review.decision?.clarificationDraftTitle || title)
-            setBody(review.decision!.clarificationDraftBody)
+            setTitle(draftTitle || title)
+            setBody(draftBody)
             setSelected(new Set(clarifiable.map((i) => i.key)))
           }}
         >
@@ -1089,32 +1094,30 @@ function ClarificationComposerDrawer({
         </Button>
       )}
 
-      {/* Title */}
       <div>
         <label className="mb-1 block text-xs font-semibold" style={{ color: INK }}>Title</label>
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Subject line the applicant sees"
+          aria-label="Clarification title"
         />
       </div>
 
-      {/* Message */}
       <div>
-        <label className="mb-1 block text-xs font-semibold" style={{ color: INK }}>Message</label>
+        <label className="mb-1 block text-xs font-semibold" style={{ color: INK }}>Message to applicant</label>
         <Textarea
           rows={6}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Tell the applicant exactly what to correct and which document it is in…"
+          aria-label="Clarification details"
         />
         <p className="mt-1 text-[10px]" style={{ color: MUT }}>
           Applicants never see scores, rule codes, or forensic detail.
-          Edit the suggested text carefully before sending.
         </p>
       </div>
 
-      {/* Feedback */}
       {msg && (
         <p
           className="rounded-lg px-3 py-2 text-xs"
@@ -1127,13 +1130,12 @@ function ClarificationComposerDrawer({
         </p>
       )}
 
-      {/* Actions */}
       <div className="flex gap-2">
         <Button
           disabled={busy || body.trim().length < 5 || title.trim().length < 3}
           onClick={() => void send()}
         >
-          {busy ? 'Sending…' : 'Send request'}
+          {busy ? 'Sending…' : 'Send clarification request'}
         </Button>
         <Button variant="outline" onClick={onClose}>
           Cancel
@@ -1149,62 +1151,86 @@ function ClarificationComposerDrawer({
 function ClarificationsTab({
   detail,
   role,
+  canRequest,
+  onRequestClarification,
   onChanged,
 }: {
   detail: ApplicationDetail
   role: string
+  canRequest: boolean
+  onRequestClarification: () => void
   onChanged: () => void
 }) {
-  void role; void onChanged // kept for API parity with existing pattern
+  void role
+  void onChanged
   const deficiencies = detail.deficiencies ?? []
-  if (deficiencies.length === 0) {
-    return (
-      <EmptyCard
-        icon={<MessageSquare size={20} style={{ color: MUT }} />}
-        message="No clarification requests for this application. Use 'Request clarification' in the right panel."
-      />
-    )
-  }
   return (
     <div className="space-y-4">
-      {deficiencies.map((d) => (
-        <div
-          key={d.id}
-          className="rounded-xl overflow-hidden"
-          style={{ border: `1px solid ${BDR}`, background: d.status === 'responded' ? '#FFFBF8' : WHITE }}
-        >
-          <div className="px-5 py-3.5" style={{ borderBottom: `1px solid ${BDR}` }}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold" style={{ color: INK }}>{d.title}</div>
-                {d.description && (
-                  <div className="text-[12px] mt-0.5" style={{ color: INK2 }}>{d.description}</div>
-                )}
-                <div className="text-[11px] mt-1" style={{ color: MUT }}>
-                  Sent {formatDate(d.createdAt)} · {formatRelative(d.createdAt)}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: INK }}>Clarification requests</h3>
+          <p className="mt-0.5 text-[12px]" style={{ color: MUT }}>
+            Ask the applicant to fix documents or answer questions. They must respond before resubmitting.
+          </p>
+        </div>
+        {canRequest && (
+          <Button size="sm" leftIcon={<MessageSquare size={13} />} onClick={onRequestClarification}>
+            Request clarification
+          </Button>
+        )}
+      </div>
+
+      {deficiencies.length === 0 ? (
+        <EmptyCard
+          icon={<MessageSquare size={20} style={{ color: MUT }} />}
+          message={
+            canRequest
+              ? 'No requests yet. Click “Request clarification” to write a message the applicant will see.'
+              : 'No clarification requests for this application.'
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          {deficiencies.map((d) => (
+            <div
+              key={d.id}
+              className="rounded-xl overflow-hidden"
+              style={{ border: `1px solid ${BDR}`, background: d.status === 'responded' ? '#FFFBF8' : WHITE }}
+            >
+              <div className="px-5 py-3.5" style={{ borderBottom: `1px solid ${BDR}` }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: INK }}>{d.title}</div>
+                    {d.description && (
+                      <div className="text-[12px] mt-0.5" style={{ color: INK2 }}>{d.description}</div>
+                    )}
+                    <div className="text-[11px] mt-1" style={{ color: MUT }}>
+                      Sent {formatDate(d.createdAt)} · {formatRelative(d.createdAt)}
+                    </div>
+                  </div>
+                  <StatusDot
+                    status={d.status === 'responded' ? 'resubmitted' : d.status === 'closed' ? 'pass' : 'clarification_required'}
+                    label={d.status === 'responded' ? 'Response received' : d.status === 'closed' ? 'Resolved' : 'Awaiting response'}
+                  />
                 </div>
               </div>
-              <StatusDot
-                status={d.status === 'responded' ? 'resubmitted' : d.status === 'closed' ? 'pass' : 'clarification_required'}
-                label={d.status === 'responded' ? 'Response received' : d.status === 'closed' ? 'Resolved' : 'Awaiting response'}
-              />
-            </div>
-          </div>
-          {d.status === 'responded' && d.applicantResponse && (
-            <div className="px-5 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: MUT }}>
-                Institution response
-              </div>
-              <div className="text-sm leading-relaxed" style={{ color: '#333333' }}>{d.applicantResponse}</div>
-              {d.respondedAt && (
-                <div className="text-[11px] mt-2" style={{ color: MUT }}>
-                  Responded {formatDate(d.respondedAt)} · {formatRelative(d.respondedAt)}
+              {d.status === 'responded' && d.applicantResponse && (
+                <div className="px-5 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: MUT }}>
+                    Institution response
+                  </div>
+                  <div className="text-sm leading-relaxed" style={{ color: '#333333' }}>{d.applicantResponse}</div>
+                  {d.respondedAt && (
+                    <div className="text-[11px] mt-2" style={{ color: MUT }}>
+                      Responded {formatDate(d.respondedAt)} · {formatRelative(d.respondedAt)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
-      ))}
+      )}
     </div>
   )
 }
@@ -1359,20 +1385,6 @@ function EmptyCard({ icon, message }: { icon: React.ReactNode; message: string }
       style={{ background: SURF }}>
       <div className="mb-2 opacity-40">{icon}</div>
       <p className="text-sm max-w-[260px]" style={{ color: MUT }}>{message}</p>
-    </div>
-  )
-}
-
-function SummaryRow({ label, value, tone }: { label: string; value: number; tone: 'ok' | 'warn' }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[11px]" style={{ color: MUT }}>{label}</span>
-      <span
-        className="text-[11px] font-semibold"
-        style={{ color: tone === 'warn' && value > 0 ? '#991B1B' : INK2 }}
-      >
-        {value}
-      </span>
     </div>
   )
 }

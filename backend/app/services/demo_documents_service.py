@@ -20,7 +20,7 @@ from app.models.enums import (
 )
 from app.models.user import User
 from app.services.audit_service import record_audit
-from app.services.chapter1_checklist import requirements_for_application
+from app.services.category_config_service import effective_requirements
 
 # Prefer scanned images from data/test-images for demo attach (realistic walkthrough).
 _TEST_IMAGE_MAP: dict[str, str] = {
@@ -248,7 +248,7 @@ def attach_demo_documents(
             },
         )
 
-    reqs = requirements_for_application(app)
+    reqs = effective_requirements(app)
     uploaded = {d.requirement_code for d in app.documents}
     targets = [
         r
@@ -273,6 +273,7 @@ def attach_demo_documents(
         doc = Document(
             application_id=application_id,
             requirement_code=code,
+            requirement_id=req.get("id"),
             name=name,
             current_version=1,
             status=DocumentStatus.UPLOADED,
@@ -287,7 +288,7 @@ def attach_demo_documents(
             mime_type=mime,
             size_bytes=len(content),
             sha256=sha,
-            storage_path=str(path),
+            storage_path=storage_name,
             page_count=1 if ext == "pdf" else None,
             file_checks={"ok": True, "source": "demo_attach", "sha256": sha},
             validation_outcome=ValidationOutcome.PASS,

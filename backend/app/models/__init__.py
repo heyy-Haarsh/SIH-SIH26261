@@ -17,6 +17,7 @@ from app.models.extraction import ExtractionRun
 from app.models.forensics import ForensicsEvidence, ForensicsIndicator, ForensicsRun
 from app.models.finding_transition import DeficiencyFinding, FindingTransition
 from app.models.handbook import HandbookReference
+from app.models.issuer_registry import IssuerRegistryRecord, IssuerVerifyEvent
 from app.models.notification import Notification
 from app.models.reconciliation import ReconciliationItem, ReconciliationRun, ReconciliationValue
 from app.models.review import DeficiencyNotice, DeficiencyResponse, ReviewDecision
@@ -53,6 +54,8 @@ __all__ = [
     "HandbookReference",
     "Notification",
     "Institution",
+    "IssuerRegistryRecord",
+    "IssuerVerifyEvent",
     "ReconciliationItem",
     "ReconciliationRun",
     "ReconciliationValue",

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/services/api'
 import type { ApplicationDetail, ForensicsIndicator, ForensicsRiskClass } from '@/types'
+import { LiveIssuerVerifyPanel } from './LiveIssuerVerifyPanel'
 import { ResolveControl } from './ResolveControl'
 import { errorText, type Resolution, type Tone } from './scrutinyUi'
 
@@ -83,6 +84,8 @@ export function AuthenticityPanel({ detail, role, onChanged }: Props) {
 
   return (
     <div className="space-y-4">
+      <LiveIssuerVerifyPanel detail={detail} role={role} />
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-3xl">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">

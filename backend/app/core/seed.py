@@ -34,13 +34,13 @@ DEFAULT_DOCS = [
         "code": "LAND_OWNERSHIP",
         "name": "Land Ownership / Lease Deed",
         "mandatory": True,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
     },
     {
         "code": "AFFILIATION",
         "name": "University Affiliation Letter",
         "mandatory": True,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
     },
     {
         "code": "BUILDING_PLAN",
@@ -52,26 +52,26 @@ DEFAULT_DOCS = [
         "code": "FIRE_NOC",
         "name": "Fire Safety Certificate / NOC",
         "mandatory": False,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
     },
     # Phase 7 document types (config-driven three-layer verification)
     {
         "code": "AICTE_PAYMENT_RECEIPT",
         "name": "AICTE Payment Receipt",
         "mandatory": False,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
     },
     {
         "code": "OCCUPANCY_CERTIFICATE",
         "name": "Occupancy / Completion Certificate / Building License / Form D",
         "mandatory": False,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
     },
     {
         "code": "STRUCTURAL_STABILITY",
         "name": "Structural Stability Certificate",
         "mandatory": False,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
     },
     {
         "code": "SATELLITE_MAP",
@@ -83,13 +83,25 @@ DEFAULT_DOCS = [
         "code": "AUDITED_ACCOUNTS",
         "name": "Previous-year Audited Statement of Accounts",
         "mandatory": False,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
     },
     {
         "code": "AFFIDAVIT_2",
         "name": "Affidavit 2",
         "mandatory": False,
-        "allowed_types": ["pdf"],
+        "allowed_types": ["pdf", "jpg", "jpeg", "png"],
+    },
+    {
+        "code": "SITE_LAB_PHOTOS",
+        "name": "Laboratory photographs (equipment & labs)",
+        "mandatory": True,
+        "allowed_types": ["jpg", "jpeg", "png"],
+    },
+    {
+        "code": "SITE_FACILITY_PHOTOS",
+        "name": "Library / classroom / amenities photographs",
+        "mandatory": True,
+        "allowed_types": ["jpg", "jpeg", "png"],
     },
 ]
 
@@ -567,3 +579,182 @@ def ensure_regional_demo_users(db: Session) -> None:
             changed = True
     if changed:
         db.commit()
+
+
+SITE_PHOTO_DOCS = [
+    {
+        "code": "SITE_LAB_PHOTOS",
+        "name": "Laboratory photographs (equipment & labs)",
+        "mandatory": True,
+        "allowed_types": ["jpg", "jpeg", "png"],
+    },
+    {
+        "code": "SITE_FACILITY_PHOTOS",
+        "name": "Library / classroom / amenities photographs",
+        "mandatory": True,
+        "allowed_types": ["jpg", "jpeg", "png"],
+    },
+]
+
+
+def ensure_site_photo_requirements(db: Session) -> None:
+    """Idempotent: add lab + library photo slots to every category checklist and published snapshot."""
+    from app.models.category_config import CategoryConfigVersion, DocumentRequirement
+    from app.services.category_config_service import _req_runtime, sync_requirements_from_json
+
+    changed = False
+    for cat in db.query(ApplicationCategory).all():
+        docs = list(cat.required_documents or [])
+        existing = {str(d.get("code") or "") for d in docs if isinstance(d, dict)}
+        added = False
+        for photo in SITE_PHOTO_DOCS:
+            if photo["code"] not in existing:
+                docs.append(dict(photo))
+                added = True
+        if added:
+            cat.required_documents = docs
+            changed = True
+        sync_requirements_from_json(db, cat, docs if docs else list(DEFAULT_DOCS))
+
+        # Patch published / draft config snapshots so pinned applications see the new slots.
+        versions = (
+            db.query(CategoryConfigVersion)
+            .filter(CategoryConfigVersion.category_id == cat.id)
+            .all()
+        )
+        by_code = {
+            r.code: r
+            for r in db.query(DocumentRequirement)
+            .filter(DocumentRequirement.category_id == cat.id, DocumentRequirement.is_active.is_(True))
+            .all()
+        }
+        for ver in versions:
+            snap = dict(ver.snapshot or {})
+            reqs = list(snap.get("requirements") or [])
+            have = {str(r.get("code") or "") for r in reqs if isinstance(r, dict)}
+            snap_changed = False
+            for photo in SITE_PHOTO_DOCS:
+                code = photo["code"]
+                if code in have:
+                    continue
+                row = by_code.get(code)
+                if row is None:
+                    continue
+                item = _req_runtime(row)
+                item["rules"] = []
+                reqs.append(item)
+                snap_changed = True
+            if snap_changed:
+                snap["requirements"] = reqs
+                ver.snapshot = snap
+                changed = True
+
+    if changed:
+        db.commit()
+
+
+def ensure_upload_paths_repaired(db: Session) -> None:
+    """Copy misplaced upload files into UPLOAD_DIR and rewrite storage_path to relative names."""
+    from pathlib import Path
+
+    from app.core.config import get_settings
+    from app.integrations.storage import resolve_upload_file
+    from app.models.document import DocumentVersion
+
+    root = get_settings().upload_path
+    root.mkdir(parents=True, exist_ok=True)
+    changed = False
+    for ver in db.query(DocumentVersion).all():
+        resolved = resolve_upload_file(ver.storage_path, root)
+        if resolved is None:
+            continue
+        rel = resolved.name
+        # Prefer keeping existing relative path when already under root with full relative name
+        try:
+            rel_path = resolved.relative_to(root.resolve()).as_posix()
+        except ValueError:
+            rel_path = rel
+        if ver.storage_path != rel_path:
+            ver.storage_path = rel_path
+            changed = True
+    if changed:
+        db.commit()
+
+
+_IMAGE_OK = ["pdf", "jpg", "jpeg", "png"]
+_CODES_ALLOW_IMAGES = {
+    "AFFIDAVIT",
+    "AFFIDAVIT_2",
+    "LAND_OWNERSHIP",
+    "AFFILIATION",
+    "BUILDING_PLAN",
+    "FIRE_NOC",
+    "OCCUPANCY_CERTIFICATE",
+    "STRUCTURAL_STABILITY",
+    "AICTE_PAYMENT_RECEIPT",
+    "AUDITED_ACCOUNTS",
+    "SATELLITE_MAP",
+    "SITE_LAB_PHOTOS",
+    "SITE_FACILITY_PHOTOS",
+    "SITE_CAMPUS_PHOTOS",
+}
+
+
+def ensure_demo_image_types(db: Session) -> None:
+    """Allow jpg/png on demo checklist slots that use scanned test images."""
+    from app.models.category_config import CategoryConfigVersion, DocumentRequirement
+    from app.services.category_config_service import sync_requirements_from_json
+
+    changed = False
+    for cat in db.query(ApplicationCategory).all():
+        docs = list(cat.required_documents or [])
+        docs_changed = False
+        for d in docs:
+            if not isinstance(d, dict):
+                continue
+            code = str(d.get("code") or "")
+            if code not in _CODES_ALLOW_IMAGES:
+                continue
+            types = [str(x).lower().lstrip(".") for x in (d.get("allowed_types") or [])]
+            merged = list(dict.fromkeys([*types, *_IMAGE_OK]))
+            if merged != types:
+                d["allowed_types"] = merged
+                docs_changed = True
+        if docs_changed:
+            cat.required_documents = docs
+            changed = True
+            sync_requirements_from_json(db, cat, docs)
+        # Patch requirement rows + snapshots even if JSON was already updated earlier.
+        for row in (
+            db.query(DocumentRequirement)
+            .filter(DocumentRequirement.category_id == cat.id, DocumentRequirement.is_active.is_(True))
+            .all()
+        ):
+            if row.code not in _CODES_ALLOW_IMAGES:
+                continue
+            types = [str(x).lower().lstrip(".") for x in (row.allowed_types or [])]
+            merged = list(dict.fromkeys([*types, *_IMAGE_OK]))
+            if merged != types:
+                row.allowed_types = merged
+                changed = True
+        for ver in db.query(CategoryConfigVersion).filter(CategoryConfigVersion.category_id == cat.id).all():
+            snap = dict(ver.snapshot or {})
+            reqs = list(snap.get("requirements") or [])
+            snap_changed = False
+            for r in reqs:
+                if not isinstance(r, dict):
+                    continue
+                if str(r.get("code") or "") not in _CODES_ALLOW_IMAGES:
+                    continue
+                types = [str(x).lower().lstrip(".") for x in (r.get("allowed_types") or [])]
+                merged = list(dict.fromkeys([*types, *_IMAGE_OK]))
+                if merged != types:
+                    r["allowed_types"] = merged
+                    snap_changed = True
+            if snap_changed:
+                snap["requirements"] = reqs
+                ver.snapshot = snap
+                changed = True
+    if changed:
+        db.commit()
+

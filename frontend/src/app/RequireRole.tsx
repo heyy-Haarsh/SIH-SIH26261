@@ -11,8 +11,9 @@ import type { UserRole } from '@/types'
  * leaving a page whose API calls would now be rejected.
  */
 export function RequireRole({ role: required }: { role: UserRole }) {
-  const { role } = useRole()
+  const { role, isLoggedIn } = useRole()
 
+  if (!isLoggedIn) return <Navigate to="/" replace />
   if (role !== required) return <Navigate to={ROLE_HOME[role]} replace />
 
   return <Outlet />

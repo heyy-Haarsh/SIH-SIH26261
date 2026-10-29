@@ -28,6 +28,7 @@ POLICY: dict[tuple[str, str], object] = {
     # --- applicant-only
     ("GET", "/applicant/applications"): {A},
     ("GET", "/applicant/applications/{application_id}"): {A},
+    ("POST", "/applicant/applications/{application_id}/demo-documents"): {A},
     ("GET", "/applicant/overview"): {A},
     ("GET", "/applicant/clarifications"): {A},
     ("GET", "/applicant/findings/{finding_id}/evidence"): {A},
@@ -92,6 +93,12 @@ POLICY: dict[tuple[str, str], object] = {
     # --- admin read-only reference data that officers may also see
     ("GET", "/admin/categories"): STAFF,
     ("GET", "/admin/rules"): STAFF,
+    # --- issuer registry (live authenticity verify — demo Network-tab endpoint)
+    ("GET", "/issuer-registry/records"): ANY,
+    ("POST", "/issuer-registry/verify"): ANY,
+    ("POST", "/issuer-registry/documents/{document_id}/verify"): ANY,
+    ("GET", "/issuer-registry/documents/{document_id}/verify-payload"): ANY,
+    ("GET", "/issuer-registry/events"): STAFF,
     ("GET", "/applications/{application_id}/rule-checks"): STAFF,
 }
 

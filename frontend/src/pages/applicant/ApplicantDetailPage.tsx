@@ -192,105 +192,41 @@ export function ApplicantDetailPage() {
 
         {isDraft && (
           <Card>
-            <CardHeader
-              title="Pre-submission readiness"
-              description="Your application is a private draft. Nothing reaches a scrutiny officer until you submit it."
-            />
-            {!readiness ? (
-              <p className="text-xs text-ink-muted">Checking readiness…</p>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-status-failed">
-                      Must fix before submitting
-                    </h3>
-                    <ul className="mt-2 space-y-1.5 text-xs text-ink-secondary">
-                      {readiness.mustFix.map((i) => (
-                        <li key={`${i.code}:${i.requirementCode ?? i.title}`}>
-                          <span className="font-medium text-ink">{i.title}</span>
-                          {i.detail && <span className="block text-ink-muted">{i.detail}</span>}
-                        </li>
-                      ))}
-                      {readiness.mustFix.length === 0 && (
-                        <li className="text-ink-muted">Nothing blocks submission.</li>
-                      )}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-status-warning">
-                      Review recommended
-                    </h3>
-                    <ul className="mt-2 space-y-1.5 text-xs text-ink-secondary">
-                      {readiness.reviewRecommended.map((i) => (
-                        <li key={`${i.code}:${i.requirementCode ?? i.title}`}>
-                          <span className="font-medium text-ink">{i.title}</span>
-                          {i.detail && <span className="block text-ink-muted">{i.detail}</span>}
-                        </li>
-                      ))}
-                      {readiness.reviewRecommended.length === 0 && (
-                        <li className="text-ink-muted">No review-recommended items right now.</li>
-                      )}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                      Limitations of these checks
-                    </h3>
-                    <ul className="mt-2 space-y-1.5 text-xs text-ink-secondary">
-                      {readiness.limitations.map((l) => (
-                        <li key={l}>{l}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-                {(() => {
-                  const decls = readiness.declarations ?? []
-                  const hasDeclarations = decls.length > 0
-                  return (
-                    <div className="space-y-2 border-t border-border pt-3">
-                      {hasDeclarations && (
-                        <>
-                          <ul className="list-disc pl-4 text-xs text-ink-secondary">
-                            {decls.map((d) => <li key={d}>{d}</li>)}
-                          </ul>
-                          <label className="flex items-start gap-2 text-xs text-ink-secondary">
-                            <input
-                              type="checkbox"
-                              className="mt-0.5"
-                              checked={declared}
-                              onChange={(e) => setDeclared(e.target.checked)}
-                            />
-                            I confirm these declarations.
-                          </label>
-                        </>
-                      )}
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                          disabled={!readiness.canSubmit || submitting || (hasDeclarations && !declared)}
-                          onClick={() => void submit()}
-                        >
-                          {submitting ? 'Submitting…' : 'Submit for scrutiny'}
-                        </Button>
-                        {!readiness.canSubmit && (
-                          <span className="text-xs text-ink-muted">
-                            Fix the items marked "must fix" to enable submission.
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })()}
+            <div className="space-y-3">
+              <label className="flex items-start gap-2.5 text-sm text-ink-secondary">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={declared}
+                  onChange={(e) => setDeclared(e.target.checked)}
+                />
+                <span>
+                  I confirm that the information and documents in this application are accurate
+                  and complete to the best of my knowledge.
+                </span>
+              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  disabled={!declared || submitting || !(readiness?.canSubmit ?? false)}
+                  onClick={() => void submit()}
+                >
+                  {submitting ? 'Submitting…' : 'Submit for scrutiny'}
+                </Button>
+                {declared && readiness && !readiness.canSubmit && (
+                  <span className="text-xs text-ink-muted">
+                    Upload all required documents to enable submission.
+                  </span>
+                )}
               </div>
-            )}
-            {submitMsg && (
-              <p
-                role="status"
-                className={`mt-3 text-xs ${submitMsg.tone === 'ok' ? 'text-status-pass' : 'text-status-failed'}`}
-              >
-                {submitMsg.text}
-              </p>
-            )}
+              {submitMsg && (
+                <p
+                  role="status"
+                  className={`text-xs ${submitMsg.tone === 'ok' ? 'text-status-pass' : 'text-status-failed'}`}
+                >
+                  {submitMsg.text}
+                </p>
+              )}
+            </div>
           </Card>
         )}
 
@@ -418,9 +354,22 @@ export function ApplicantDetailPage() {
                 earlier version.
               </p>
             </div>
-            <Badge tone={data.requiredUploaded >= data.requiredTotal ? 'pass' : 'pending'}>
-              {data.requiredUploaded}/{data.requiredTotal}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              {data.canUpload && (
+                <AttachDemoDocsButton
+                  applicationId={data.id}
+                  onDone={reload}
+                  label={
+                    data.requiredUploaded >= data.requirements.length
+                      ? 'Re-run document checks'
+                      : 'Attach demo documents'
+                  }
+                />
+              )}
+              <Badge tone={data.requiredUploaded >= data.requiredTotal ? 'pass' : 'pending'}>
+                {data.requiredUploaded}/{data.requiredTotal}
+              </Badge>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
@@ -481,6 +430,44 @@ export function ApplicantDetailPage() {
         </Card>
       </div>
     </AppShell>
+  )
+}
+
+
+function AttachDemoDocsButton({
+  applicationId,
+  onDone,
+  label = 'Attach demo documents',
+}: {
+  applicationId: string
+  onDone: () => Promise<void> | void
+  label?: string
+}) {
+  const { role } = useRole()
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  async function run() {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const res = await api.attachDemoDocuments(applicationId, role, true)
+      setMsg(res.message)
+      await onDone()
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : 'Could not attach demo documents.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run()}>
+        {busy ? 'Working…' : label}
+      </Button>
+      {msg && <span className="max-w-[220px] text-right text-[10px] text-ink-muted">{msg}</span>}
+    </div>
   )
 }
 

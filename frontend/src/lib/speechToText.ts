@@ -63,7 +63,10 @@ export async function startLiveDictation(
     },
   })
 
-  const qs = new URLSearchParams({ role, userId: `demo-${role}` })
+  const { getDemoSession } = await import('@/lib/demoAuthSession')
+  const session = getDemoSession()
+  const userId = session.role === role ? session.userId : `demo-${role}`
+  const qs = new URLSearchParams({ role, userId })
   const ws = new WebSocket(`${apiWsBase()}/scrutiny/transcribe/ws?${qs}`)
   ws.binaryType = 'arraybuffer'
 

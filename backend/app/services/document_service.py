@@ -249,7 +249,7 @@ def upload_document(
         declared_content_type=file.content_type,
         size_bytes=result.size_bytes,
         sha256=result.sha256,
-        storage_path=str(storage_path),
+        storage_path=storage_name,
         page_count=result.page_count,
         file_checks=checks,
         validation_outcome=(

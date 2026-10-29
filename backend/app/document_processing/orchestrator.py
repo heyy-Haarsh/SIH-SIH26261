@@ -12,6 +12,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.integrations.storage import resolve_upload_file
 from app.document_processing.evidence_mapper import EvidenceMapper
 from app.document_processing.field_extractor import FieldExtractor
 from app.document_processing.inspector import DocumentInspector, MIN_TEXT_CHARS_PER_PAGE
@@ -525,7 +526,7 @@ def run_extraction_for_version(
     triggered_by_id: str | None,
     force: bool = False,
 ) -> ExtractionRun:
-    path = Path(document_version.storage_path)
+    path = resolve_upload_file(document_version.storage_path) or Path(document_version.storage_path)
     if not path.exists():
         run = ExtractionRun(
             document_version_id=document_version.id,

@@ -11,7 +11,10 @@ import type { UserRole } from '@/types'
 const ROLES: UserRole[] = ['applicant', 'officer', 'regional_officer']
 
 afterEach(cleanup)
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  localStorage.setItem('praman.demo.loggedIn', '1')
+})
 
 describe('role navigation', () => {
   it.each(ROLES)('every %s menu entry stays inside that role and has a real route', (role) => {
@@ -73,6 +76,7 @@ describe('role navigation', () => {
 describe('RequireRole', () => {
   function renderAt(path: string, stored: UserRole) {
     localStorage.setItem('praman.demo.role', stored)
+    localStorage.setItem('praman.demo.loggedIn', '1')
     return render(
       <RoleProvider>
         <MemoryRouter initialEntries={[path]}>

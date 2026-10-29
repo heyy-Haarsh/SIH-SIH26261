@@ -81,7 +81,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('ApplicantDetailPage — draft submission', () => {
-  it('shows server-computed blockers and keeps Submit disabled', async () => {
+  it('keeps Submit disabled until the confirmation checkbox is checked', async () => {
     mocks.getReadiness.mockResolvedValue(
       readiness({
         canSubmit: false,
@@ -96,8 +96,10 @@ describe('ApplicantDetailPage — draft submission', () => {
       }),
     )
     renderPage()
-    expect(await screen.findByText('Fire Safety Certificate has not been uploaded')).toBeTruthy()
-    expect(screen.getByText('Pre-check only; not a compliance verdict.')).toBeTruthy()
+    expect(
+      await screen.findByText(/accurate and complete to the best of my knowledge/i),
+    ).toBeTruthy()
+    expect(screen.queryByText('Must fix before submitting')).toBeNull()
     const button = screen.getByRole('button', { name: 'Submit for scrutiny' }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
     fireEvent.click(button)
@@ -116,6 +118,8 @@ describe('ApplicantDetailPage — draft submission', () => {
     })
     renderPage()
     const button = (await screen.findByRole('button', { name: 'Submit for scrutiny' })) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox'))
     await waitFor(() => expect(button.disabled).toBe(false))
     fireEvent.click(button)
     fireEvent.click(button)

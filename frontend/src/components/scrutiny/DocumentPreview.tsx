@@ -16,6 +16,8 @@ interface Props {
   highlightPage?: number | null
   highlightBBox?: EvidenceBBox | null
   highlightLabel?: string | null
+  /** Hide the inline download control when the parent provides its own. */
+  hideDownload?: boolean
 }
 
 type State =
@@ -36,6 +38,7 @@ export function DocumentPreview({
   highlightPage,
   highlightBBox,
   highlightLabel,
+  hideDownload = false,
 }: Props) {
   const [state, setState] = useState<State>({ kind: 'loading' })
 
@@ -106,11 +109,13 @@ export function DocumentPreview({
           This file type cannot be previewed in the browser.
         </p>
       )}
-      <a href={state.url} download={fileName}>
-        <Button size="sm" variant="outline" leftIcon={<Download size={14} />}>
-          Download {fileName}
-        </Button>
-      </a>
+      {!hideDownload && (
+        <a href={state.url} download={fileName}>
+          <Button size="sm" variant="outline" leftIcon={<Download size={14} />}>
+            Download {fileName}
+          </Button>
+        </a>
+      )}
     </div>
   )
 }

@@ -55,9 +55,13 @@ import type {
   ForensicsIndicator,
   ForensicsRun,
   HandbookReferenceAdmin,
+  IssuerRegistryRecord,
+  IssuerVerifyPayloadPreview,
+  IssuerVerifyResult,
   ReconciliationRun,
   ScrutinyReview,
 } from '@/types'
+import { getDemoSession } from '@/lib/demoAuthSession'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
@@ -84,6 +88,13 @@ function formatDetail(body: unknown): string {
   return JSON.stringify(body)
 }
 
+function demoAuthHeaders(role?: string): Record<string, string> {
+  if (!role) return {}
+  const session = getDemoSession()
+  const userId = session.role === role ? session.userId : `demo-${role}`
+  return { 'X-Demo-Role': role, 'X-Demo-User-Id': userId }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit & { role?: string } = {},
@@ -92,7 +103,7 @@ async function request<T>(
   const res = await fetch(`${API_BASE}${path}`, {
     ...rest,
     headers: {
-      ...(role ? { 'X-Demo-Role': role, 'X-Demo-User-Id': `demo-${role}` } : {}),
+      ...demoAuthHeaders(role),
       ...headers,
     },
   })
@@ -152,7 +163,7 @@ function auditQuery(params: AuditSearchParams): string {
 }
 async function requestBlob(path: string, role: string): Promise<{ blob: Blob; fileName?: string }> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'X-Demo-Role': role, 'X-Demo-User-Id': `demo-${role}` },
+    headers: demoAuthHeaders(role),
   })
   if (!res.ok) {
     let detail = res.statusText
@@ -227,6 +238,19 @@ export const api = {
     request<Readiness>(`/applications/${applicationId}/readiness`, { role }),
 
   /** The server requires the applicant's declarations to be confirmed; repeating a submit is safe. */
+  attachDemoDocuments: (id: string, role: string, includeOptional = true) =>
+    request<{
+      attachedCount: number
+      attached: Array<{ code: string; name: string; fileName: string }>
+      alreadyPresent: number
+      checksRun?: number
+      message: string
+      application: ApplicantApplication
+    }>(
+      `/applicant/applications/${id}/demo-documents?include_optional=${includeOptional ? 'true' : 'false'}`,
+      { method: 'POST', role },
+    ),
+
   submitApplication: (role: string, applicationId: string, confirmDeclarations: boolean) =>
     request<SubmitResult>(`/applications/${applicationId}/submit`, {
       method: 'POST',
@@ -948,6 +972,43 @@ export const api = {
     request<PublicCategoryConfig>(`/applications/categories/${encodeURIComponent(code)}/config`, { role }),
   listRuleChecks: (role: string, applicationId: string) =>
     request<RuleCheckRow[]>(`/applications/${applicationId}/rule-checks`, { role }),
+
+  // ---- Issuer registry (live authenticity — show this in Network tab) -----
+  listIssuerRegistryRecords: (role: string) =>
+    request<{ records: IssuerRegistryRecord[] }>('/issuer-registry/records', { role }),
+
+  verifyIssuerRegistry: (
+    role: string,
+    body: {
+      docType?: string
+      certificateNumber: string
+      holderName?: string
+      contentHash?: string
+      applicationId?: string
+      documentId?: string
+    },
+  ) =>
+    request<IssuerVerifyResult>('/issuer-registry/verify', {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  verifyDocumentAgainstIssuerRegistry: (role: string, documentId: string) =>
+    request<IssuerVerifyResult>(`/issuer-registry/documents/${documentId}/verify`, {
+      method: 'POST',
+      role,
+    }),
+
+  getIssuerVerifyPayload: (role: string, documentId: string) =>
+    request<IssuerVerifyPayloadPreview>(
+      `/issuer-registry/documents/${documentId}/verify-payload`,
+      { role },
+    ),
+
+  listIssuerVerifyEvents: (role: string) =>
+    request<{ events: Array<Record<string, unknown>> }>('/issuer-registry/events', { role }),
 }
 
 function jsonBody(method: string, role: string, body: unknown): RequestInit & { role: string } {
