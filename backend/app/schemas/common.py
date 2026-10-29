@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def to_camel(string: str) -> str:
@@ -310,6 +310,9 @@ class WorkflowClarificationIn(BaseModel):
     title: str
     description: str
     finding_ids: list[str] = Field(default_factory=list)
+    # Officer states whether a replacement file is mandatory; the server enforces it on response.
+    requires_replacement: bool = False
+    due_date: date | None = None
 
 
 class WorkflowDecisionIn(BaseModel):
@@ -326,7 +329,8 @@ class WorkflowResubmitIn(BaseModel):
 
 
 class DeficiencyRespondIn(BaseModel):
-    response: str
+    # May be empty when a replacement document alone answers the request (the server decides).
+    response: str = ""
 
 
 class FindingResolveIn(BaseModel):
@@ -334,11 +338,46 @@ class FindingResolveIn(BaseModel):
     reason: str
 
 
+class FindingTransitionIn(BaseModel):
+    status: str
+    reason: str = ""
+
+
+class FindingTransitionOut(CamelModel):
+    id: str
+    finding_id: str
+    from_status: str
+    to_status: str
+    actor_name: str
+    actor_role: str
+    reason: str = ""
+    created_at: datetime
+
+
+class ApplicationCategoryBriefOut(CamelModel):
+    """Active categories an applicant may choose when creating an application."""
+
+    code: str
+    name: str
+    description: str = ""
+    required_documents: list[dict[str, Any]] = Field(default_factory=list)
+    config_version: int | None = None
+    info_field_count: int = 0
+    mandatory_count: int = 0
+    optional_count: int = 0
+    available: bool = True
+
+
 class ApplicationCreateIn(BaseModel):
     category_code: str
     institution_name: str = Field(min_length=1, max_length=255)
     program_name: str
     academic_year: str
+    # The applicant UI saves a private draft and submits explicitly. Defaults to False so
+    # scripted/legacy clients keep their immediate-submit behaviour.
+    save_as_draft: bool = False
+    # Values for the category's configured information fields, keyed by field key.
+    info_values: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("institution_name")
     @classmethod
@@ -352,11 +391,18 @@ class ApplicationCreateIn(BaseModel):
 
     @field_validator("program_name", "academic_year")
     @classmethod
-    def _strip_required(cls, v: str) -> str:
-        cleaned = (v or "").strip()
-        if not cleaned:
-            raise ValueError("This field is required.")
-        return cleaned
+    def _strip(cls, v: str) -> str:
+        return (v or "").strip()
+
+    @model_validator(mode="after")
+    def _require_details_unless_draft(self) -> "ApplicationCreateIn":
+        # A draft may be saved before every detail is known (autosave); submission and
+        # readiness still require them, so nothing incomplete can reach an officer.
+        if not self.save_as_draft:
+            for name in ("program_name", "academic_year"):
+                if not getattr(self, name):
+                    raise ValueError(f"{name}: This field is required.")
+        return self
 
 
 class ValidationRunOut(CamelModel):
@@ -400,6 +446,12 @@ class ApplicantDocumentVersionOut(CamelModel):
     file_name: str
     uploaded_at: datetime
     size_bytes: int
+    is_current: bool = False
+    # ready | limited | failed | processing | not_run — from the extraction run for THIS version.
+    processing_state: str = "not_run"
+    processing_message: str = ""
+    # Open officer findings that were recorded against this version (history, not a verdict).
+    officer_items: int = 0
 
 
 class ApplicantDocumentOut(CamelModel):
@@ -408,8 +460,29 @@ class ApplicantDocumentOut(CamelModel):
     version: int
     uploaded_at: datetime
     size_bytes: int
+    mime_type: str = ""
+    page_count: int | None = None
     document_check: DocumentCheckOut | None = None
     previous_versions: list[ApplicantDocumentVersionOut] = Field(default_factory=list)
+    versions: list[ApplicantDocumentVersionOut] = Field(default_factory=list)
+    processing_state: str = "not_run"
+    processing_message: str = ""
+    # True while results from an earlier version are being replaced by a re-check.
+    reverification_pending: bool = False
+
+
+class ApplicantCheckOut(CamelModel):
+    """One configured automated check on a document, in the institution's terms."""
+
+    title: str
+    meaning: str = ""
+    # passed | failed | manual_review | unable_to_evaluate | pending | source_unavailable
+    state: str
+    state_label: str
+    message: str = ""
+    document_version: int | None = None
+    rule_version: int | None = None
+    config_version: int | None = None
 
 
 class ApplicantRequirementOut(CamelModel):
@@ -420,6 +493,30 @@ class ApplicantRequirementOut(CamelModel):
     upload_status: str  # not_uploaded | uploaded | replaced | needs_attention
     upload_status_label: str
     document: ApplicantDocumentOut | None = None
+    description: str = ""
+    max_size_mb: int | None = None
+    checks: list[ApplicantCheckOut] = Field(default_factory=list)
+
+
+class ApplicantLinkedItemOut(CamelModel):
+    """One item a clarification covers, in plain words (no rule codes, scores or internals)."""
+
+    document_name: str
+    summary: str
+
+
+class ApplicantResponseEntryOut(CamelModel):
+    id: str
+    mode: str  # text | document | both
+    text: str
+    documents: list[dict] = Field(default_factory=list)
+    created_at: datetime
+
+
+class ApplicantAffectedDocumentOut(CamelModel):
+    document_id: str
+    name: str
+    current_version: int
 
 
 class ApplicantDeficiencyOut(CamelModel):
@@ -431,6 +528,121 @@ class ApplicantDeficiencyOut(CamelModel):
     responded_at: datetime | None = None
     created_at: datetime
     resolved_at: datetime | None = None
+    linked_items: list[ApplicantLinkedItemOut] = Field(default_factory=list)
+    application_id: str = ""
+    application_number: str = ""
+    requested_by: str | None = None
+    due_date: date | None = None
+    requires_replacement: bool = False
+    replacement_received: bool = False
+    # action_required | awaiting_review | resolved — what the institution should understand.
+    applicant_state: str = "action_required"
+    affected_documents: list[ApplicantAffectedDocumentOut] = Field(default_factory=list)
+    finding_refs: list[str] = Field(default_factory=list)
+    responses: list[ApplicantResponseEntryOut] = Field(default_factory=list)
+
+
+class ApplicantFindingDocumentOut(CamelModel):
+    document_id: str | None = None
+    name: str
+    # Version the finding was recorded against, and the version currently on file.
+    version: int | None = None
+    current_version: int | None = None
+
+
+class ApplicantFindingOut(CamelModel):
+    """A finding the institution is allowed to see: officer-requested, or closed with an officer note.
+
+    Internal automated diagnostics, scores, rule codes and forensic indicators are never included.
+    """
+
+    id: str
+    reference: str
+    kind: str  # officer_request | officer_update
+    title: str
+    explanation: str
+    requested_correction: str | None = None
+    document: ApplicantFindingDocumentOut
+    page_reference: str | None = None
+    snippet: str | None = None
+    # open | response_needed | response_submitted | resolved | waived | accepted | rechecked
+    status: str
+    status_label: str
+    next_action: str
+    clarification_id: str | None = None
+    officer_note: str | None = None
+    updated_at: datetime | None = None
+    # True when a newer document version has replaced the one this finding was recorded against.
+    outdated_version: bool = False
+
+
+class ApplicantEvidenceFieldOut(CamelModel):
+    name: str
+    value: str
+    page_number: int | None = None
+    # Present only when the extractor recorded real coordinates. Never estimated.
+    bbox: dict | None = None
+
+
+class ApplicantEvidenceOut(CamelModel):
+    finding_id: str
+    reference: str
+    title: str
+    explanation: str
+    requested_correction: str | None = None
+    document_id: str | None = None
+    document_name: str
+    version: int | None = None
+    current_version: int | None = None
+    mime_type: str = ""
+    page_count: int | None = None
+    page: int | None = None
+    page_reference: str | None = None
+    snippet: str | None = None
+    fields: list[ApplicantEvidenceFieldOut] = Field(default_factory=list)
+    clarification_id: str | None = None
+    # Plain statement of how precise the location is, so the UI never implies more than is known.
+    location_note: str = ""
+
+
+class ApplicantLifecycleStepOut(CamelModel):
+    key: str
+    label: str
+    state: str  # done | current | upcoming
+    at: datetime | None = None
+    detail: str | None = None
+
+
+class ApplicantNextActionOut(CamelModel):
+    kind: str  # respond_clarification | upload_documents | fix_document | submit_draft | continue_draft
+    title: str
+    reason: str
+    application_id: str
+    application_number: str
+    clarification_id: str | None = None
+    document_code: str | None = None
+
+
+class ApplicantActivityOut(CamelModel):
+    id: str
+    source: str  # system | officer | you
+    label: str
+    detail: str | None = None
+    application_id: str
+    application_number: str
+    timestamp: datetime
+
+
+class ApplicantOverviewOut(CamelModel):
+    """Counts have one definition each (see applicant_lifecycle) and match the dashboard cards."""
+
+    active: int
+    action_required: int
+    under_scrutiny: int
+    decision_recorded: int
+    drafts: int
+    next_actions: list[ApplicantNextActionOut] = Field(default_factory=list)
+    recent_activity: list[ApplicantActivityOut] = Field(default_factory=list)
 
 
 class ApplicantHistoryEntryOut(CamelModel):
@@ -438,6 +650,7 @@ class ApplicantHistoryEntryOut(CamelModel):
     timestamp: datetime
     label: str
     detail: str | None = None
+    source: str = "system"  # you | officer | system
 
 
 class ApplicantApplicationOut(CamelModel):
@@ -466,9 +679,27 @@ class ApplicantApplicationOut(CamelModel):
     corrections: list[dict] = Field(default_factory=list)
     # Closed issues the officer marked with a note (resolved / waived / accepted).
     officer_updates: list[dict] = Field(default_factory=list)
+    stage: str = "draft"
+    stage_label: str = ""
+    lifecycle: list[ApplicantLifecycleStepOut] = Field(default_factory=list)
+    findings: list[ApplicantFindingOut] = Field(default_factory=list)
+    # Files uploaded earlier for a requirement the current category no longer lists. Kept, not deleted.
+    other_documents: list[ApplicantDocumentOut] = Field(default_factory=list)
+    updated_at: datetime | None = None
+    contact_email: str | None = None
+    # Category configuration this application is judged by (pinned) and the saved answers.
+    info_fields: list[dict] = Field(default_factory=list)
+    info_problems: dict[str, str] = Field(default_factory=dict)
+    config_version: int | None = None
+    config_available: bool = True
 
 
 class ApplicantApplicationSummaryOut(CamelModel):
+    stage: str = "draft"
+    stage_label: str = ""
+    updated_at: datetime | None = None
+    category_code: str = ""
+    next_action: ApplicantNextActionOut | None = None
     id: str
     application_number: str
     institution_name: str
@@ -483,3 +714,13 @@ class ApplicantApplicationSummaryOut(CamelModel):
     required_uploaded: int = 0
     officer_decision: str | None = None
     latest_request_title: str | None = None
+
+
+class ApplicationDraftUpdateIn(BaseModel):
+    """Partial update of a draft's details (autosave). Omitted fields are left unchanged."""
+
+    category_code: str | None = None
+    institution_name: str | None = Field(default=None, min_length=1, max_length=255)
+    program_name: str | None = Field(default=None, max_length=255)
+    academic_year: str | None = Field(default=None, max_length=32)
+    info_values: dict[str, Any] | None = None

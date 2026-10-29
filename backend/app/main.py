@@ -5,12 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     admin,
+    admin_config,
     applicant,
     applications,
     doc_verification,
     extraction,
     forensics,
     health,
+    notifications,
     reconciliation,
     scrutiny,
     workflow,
@@ -34,6 +36,10 @@ async def lifespan(_: FastAPI):
     try:
         seed_if_empty(db)
         ensure_regional_demo_users(db)
+        # Upgrade existing data to the configuration-driven model (idempotent).
+        from app.services import category_config_service
+
+        category_config_service.ensure_baseline(db)
         runtime_config.load_from_db(db)
     finally:
         db.close()
@@ -69,6 +75,8 @@ def create_app() -> FastAPI:
     application.include_router(workflow.router, prefix="/api/v1")
     application.include_router(doc_verification.router, prefix="/api/v1")
     application.include_router(admin.router, prefix="/api/v1")
+    application.include_router(admin_config.router, prefix="/api/v1")
+    application.include_router(notifications.router, prefix="/api/v1")
     # Single set of handlers (includes logging for unhandled errors; no stack traces to clients)
     register_exception_handlers(application)
 

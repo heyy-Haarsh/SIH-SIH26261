@@ -448,6 +448,26 @@ def run_for_document(
     )
     run.completed_at = utcnow()
 
+    # A newer version may have been uploaded while this run was working. Its result describes a
+    # file that is no longer current, so it must never overwrite the latest version's snapshot.
+    db.refresh(document, attribute_names=["current_version"])
+    if document.current_version != version.version:
+        run.summary = {**(run.summary or {}), "superseded": True, "supersededBy": document.current_version}
+        run.limitations = [
+            *(run.limitations or []),
+            f"Superseded: version {document.current_version} was uploaded while this check ran. "
+            "These results describe an older file and are not applied.",
+        ]
+        run.status = DocumentVerificationRunStatus.COMPLETED_PARTIAL
+        for check in checks:
+            if check.status == "open":
+                check.status = "superseded"
+                check.resolution_reason = f"Superseded by version {document.current_version}."
+        if commit:
+            db.commit()
+            db.refresh(run)
+        return run
+
     document.rule_validation_status = rule_status
     document.external_verification_status = ext_status
     document.review_status = review_status

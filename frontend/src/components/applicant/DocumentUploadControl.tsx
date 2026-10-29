@@ -1,8 +1,8 @@
 import { useId, useState } from 'react'
 import { RefreshCw, Upload } from 'lucide-react'
 import { DocumentCheckPanel } from '@/components/applicant/DocumentCheckPanel'
-import { FALLBACK_POLICY, validateFile, type FilePolicy } from '@/lib/fileValidation'
-import { checkFileBlur } from '@/lib/blurCheck'
+import { FALLBACK_POLICY, type FilePolicy } from '@/lib/fileValidation'
+import { blocksUpload, inspectUpload, type CheckLine } from '@/lib/intakeChecks'
 import { api, ApiError, type UploadDocumentResult } from '@/services/api'
 import { useRole } from '@/app/RoleContext'
 
@@ -17,8 +17,12 @@ interface Props {
   showCheck?: boolean
   /** Button only — no format line. Use on the application checklist. */
   compact?: boolean
+  /** Called when the internal upload phase changes. */
+  onPhaseChange?: (phase: Phase) => void
   /** Called after a successful upload so the parent can refresh in the background. */
   onUploaded: (result: UploadDocumentResult) => void | Promise<void>
+  /** Local check lines, including when the file is rejected before upload. */
+  onChecked?: (lines: CheckLine[]) => void
 }
 
 type Phase = 'idle' | 'validating' | 'uploading'
@@ -36,7 +40,9 @@ export function DocumentUploadControl({
   disabled,
   showCheck = false,
   compact = false,
+  onPhaseChange,
   onUploaded,
+  onChecked,
 }: Props) {
   const { role } = useRole()
   const inputId = useId()
@@ -45,6 +51,11 @@ export function DocumentUploadControl({
   const [warnings, setWarnings] = useState<string[]>([])
   const [result, setResult] = useState<UploadDocumentResult | null>(null)
 
+  function changePhase(p: Phase) {
+    setPhase(p)
+    onPhaseChange?.(p)
+  }
+
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.target
     const file = input.files?.[0]
@@ -52,23 +63,18 @@ export function DocumentUploadControl({
     setErrors([])
     setWarnings([])
     setResult(null)
-    setPhase('validating')
+    changePhase('validating')
     try {
-      const check = await validateFile(file, policy)
-      if (!check.ok) {
-        setErrors(check.errors)
+      const lines = await inspectUpload(file, policy)
+      onChecked?.(lines)
+      const failed = lines.filter((l) => l.status === 'fail' && l.action).map((l) => l.action as string)
+      if (blocksUpload(lines)) {
+        setErrors(failed)
         return
       }
-      const warn = [...check.warnings]
-      const blur = await checkFileBlur(file)
-      if (blur.blurry) {
-        setErrors([blur.message])
-        return
-      }
-      if (blur.applicable && blur.score === null && blur.message) warn.push(blur.message)
-      setWarnings(warn)
+      setWarnings(failed)
 
-      setPhase('uploading')
+      changePhase('uploading')
       const res = await api.uploadDocument(role, applicationId, file, requirementCode)
       setResult(res)
       await onUploaded(res)
@@ -79,7 +85,7 @@ export function DocumentUploadControl({
         setErrors(['Could not reach the server. Check your connection and try again.'])
       }
     } finally {
-      setPhase('idle')
+      changePhase('idle')
       input.value = '' // allow re-selecting the same file after fixing it
     }
   }
@@ -129,7 +135,7 @@ export function DocumentUploadControl({
       {errors.length > 0 && (
         <div
           role="alert"
-          className="rounded-[var(--radius-md)] border border-red-200 bg-status-failed-bg px-3 py-2 text-xs text-status-failed"
+          className="rounded-[var(--radius-md)] border border-[#e2cbc8] bg-status-failed-bg px-3 py-2 text-xs text-status-failed"
         >
           <p className="font-medium">This file was not uploaded:</p>
           <ul className="mt-1 list-disc pl-4">
@@ -140,7 +146,7 @@ export function DocumentUploadControl({
         </div>
       )}
       {warnings.length > 0 && errors.length === 0 && (
-        <p className="text-[11px] text-amber-800">{warnings.join(' ')}</p>
+        <p className="text-[11px] text-status-warning">{warnings.join(' ')}</p>
       )}
       {result && (
         <p className="text-xs text-status-pass" role="status">

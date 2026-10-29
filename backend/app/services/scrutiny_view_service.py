@@ -19,7 +19,7 @@ from app.document_processing.ocr_processor import tesseract_status
 from app.models.application import Application
 from app.models.doc_verification import DocumentVerificationCheck, DocumentVerificationRun
 from app.models.document import Document
-from app.models.enums import ReviewDecisionType
+from app.models.enums import ACTIVE_FINDING_VALUES, ReviewDecisionType
 from app.models.extraction import ExtractionRun
 from app.models.review import DeficiencyNotice, ReviewDecision
 from app.models.validation import Finding
@@ -126,6 +126,12 @@ class _Raw:
     evidence: list[IssueEvidenceOut] = field(default_factory=list)
     related_doc_ids: list[str] = field(default_factory=list)
     occurrences: int = 1
+    # Fine-grained officer lifecycle (open | under_review | clarification_requested | reopened | …).
+    # ``status`` stays the coarse open/closed view every count and filter relies on.
+    lifecycle: str = "open"
+
+
+_LIFECYCLE_RANK = {"clarification_requested": 3, "under_review": 2, "reopened": 1, "open": 0}
 
 
 def _merge(raws: list[_Raw]) -> list[_Raw]:
@@ -143,6 +149,10 @@ def _merge(raws: list[_Raw]) -> list[_Raw]:
             cur.title = r.title
             cur.explanation = r.explanation
         if r.status == "open":
+            if cur.status != "open" or _LIFECYCLE_RANK.get(r.lifecycle, 0) > _LIFECYCLE_RANK.get(
+                cur.lifecycle, 0
+            ):
+                cur.lifecycle = r.lifecycle
             cur.status = "open"
         cur.finding_ids += [i for i in r.finding_ids if i not in cur.finding_ids]
         cur.check_ids += [i for i in r.check_ids if i not in cur.check_ids]
@@ -167,12 +177,14 @@ def _finding_raw(ctx: ReviewContext, f: Finding) -> _Raw | None:
     text = issue_text.describe_finding(code, f.title, f.description, doc_name)
     related = [e.document_id for e in f.evidence if e.document_id and e.document_id != f.document_id]
     related = list(dict.fromkeys(related))
+    lifecycle = enum_val(f.status)
     return _Raw(
         topic=text.topic,
         title=text.title,
         explanation=text.explanation,
         severity=norm_severity(enum_val(f.severity)),
-        status=enum_val(f.status),
+        status="open" if lifecycle in ACTIVE_FINDING_VALUES else lifecycle,
+        lifecycle=lifecycle,
         source=text.source,
         layer=text.layer,
         document_id=f.document_id,
@@ -262,6 +274,7 @@ def collect_issues(ctx: ReviewContext) -> list[ScrutinyIssueOut]:
                 explanation=r.explanation,
                 severity=r.severity,
                 status=r.status,
+                lifecycle_status=r.lifecycle if r.status == "open" else r.status,
                 source=r.source,
                 layer=r.layer,
                 document_id=r.document_id,
@@ -455,7 +468,9 @@ def build_review(db: Session, app: Application) -> ScrutinyReviewOut:
     ctx = ReviewContext(db, app)
     issues = collect_issues(ctx)
     groups = group_issues(ctx, issues)
-    reqs = app.category.required_documents if app.category else DEFAULT_DOCS
+    from app.services import category_config_service
+
+    reqs = category_config_service.effective_requirements(app)
     uploaded = {d.requirement_code for d in ctx.docs}
     missing = [
         MissingDocumentOut(code=r["code"], name=r["name"], mandatory=bool(r.get("mandatory", True)))

@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { DemoBanner } from '@/components/dashboard/DemoBanner'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { SkeletonCardGrid } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { HealthBadge } from '@/components/admin/HealthBadge'
@@ -101,7 +102,11 @@ export function IntegrationsPage() {
           {message}
         </div>
       )}
-      {loading && <p className="text-sm text-ink-muted">Checking integrations…</p>}
+      {loading && !data && (
+        <div className="py-2">
+          <SkeletonCardGrid count={4} />
+        </div>
+      )}
 
       {data && (
         <div className="mb-4 flex flex-wrap gap-2 text-xs text-ink-muted">

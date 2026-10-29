@@ -1,3 +1,7 @@
+import type { ApplicantCheck, PublicInfoField } from './config'
+
+export * from './config'
+
 export type UserRole = 'applicant' | 'officer' | 'regional_officer'
 
 export type ApplicationStatus =
@@ -17,7 +21,14 @@ export type ApplicationStatus =
   | 'approved'
 
 export type FindingSeverity = 'info' | 'warning' | 'failed' | 'manual_review'
-export type FindingStatus = 'open' | 'resolved' | 'waived' | 'accepted'
+export type FindingStatus =
+  | 'open'
+  | 'response_needed'
+  | 'response_submitted'
+  | 'resolved'
+  | 'waived'
+  | 'accepted'
+  | 'rechecked'
 export type ValidationOutcome =
   | 'pass'
   | 'warning'
@@ -585,11 +596,18 @@ export interface UploadPolicy {
 
 export type ApplicantUploadStatus = 'not_uploaded' | 'uploaded' | 'replaced' | 'needs_attention'
 
+/** Where a version stands in processing. `limited` = could only be partly read; it is not a compliance verdict. */
+export type ProcessingState = 'ready' | 'limited' | 'failed' | 'processing' | 'not_run'
+
 export interface ApplicantDocumentVersion {
   version: number
   fileName: string
   uploadedAt: string
   sizeBytes: number
+  isCurrent?: boolean
+  processingState?: ProcessingState
+  processingMessage?: string
+  officerItems?: number
 }
 
 export interface ApplicantDocument {
@@ -598,8 +616,14 @@ export interface ApplicantDocument {
   version: number
   uploadedAt: string
   sizeBytes: number
+  mimeType?: string
+  pageCount?: number | null
   documentCheck?: DocumentCheck | null
   previousVersions: ApplicantDocumentVersion[]
+  versions?: ApplicantDocumentVersion[]
+  processingState?: ProcessingState
+  processingMessage?: string
+  reverificationPending?: boolean
 }
 
 export interface ApplicantRequirement {
@@ -610,6 +634,20 @@ export interface ApplicantRequirement {
   uploadStatus: ApplicantUploadStatus
   uploadStatusLabel: string
   document?: ApplicantDocument | null
+  description?: string
+  maxSizeMb?: number | null
+  checks?: ApplicantCheck[]
+}
+
+export type ClarificationState = 'action_required' | 'response_saved' | 'awaiting_review' | 'resolved'
+export type ResponseMode = 'text' | 'document' | 'both'
+
+export interface ApplicantResponseEntry {
+  id: string
+  mode: ResponseMode
+  text: string
+  documents: Array<{ documentId?: string; name?: string; version?: number }>
+  createdAt: string
 }
 
 export interface ApplicantDeficiency {
@@ -621,6 +659,18 @@ export interface ApplicantDeficiency {
   respondedAt?: string | null
   createdAt: string
   resolvedAt?: string | null
+  /** Every item this clarification covers, in plain words. */
+  linkedItems?: Array<{ documentName: string; summary: string }>
+  applicationId?: string
+  applicationNumber?: string
+  requestedBy?: string | null
+  dueDate?: string | null
+  requiresReplacement?: boolean
+  replacementReceived?: boolean
+  applicantState?: ClarificationState
+  affectedDocuments?: Array<{ documentId: string; name: string; currentVersion: number }>
+  findingRefs?: string[]
+  responses?: ApplicantResponseEntry[]
 }
 
 export interface ApplicantHistoryEntry {
@@ -628,6 +678,112 @@ export interface ApplicantHistoryEntry {
   timestamp: string
   label: string
   detail?: string | null
+  source?: 'you' | 'officer' | 'system'
+}
+
+export type ApplicantStage =
+  | 'draft'
+  | 'submitted'
+  | 'processing'
+  | 'scrutiny'
+  | 'applicant_action'
+  | 'resubmitted'
+  | 'decision_recorded'
+
+export interface LifecycleStep {
+  key: string
+  label: string
+  state: 'done' | 'current' | 'upcoming'
+  at?: string | null
+  detail?: string | null
+}
+
+
+export interface ApplicantFinding {
+  id: string
+  reference: string
+  kind: 'officer_request' | 'officer_update'
+  title: string
+  explanation: string
+  requestedCorrection?: string | null
+  document: {
+    documentId?: string | null
+    name: string
+    version?: number | null
+    currentVersion?: number | null
+  }
+  pageReference?: string | null
+  snippet?: string | null
+  status: FindingStatus
+  statusLabel: string
+  nextAction: string
+  clarificationId?: string | null
+  officerNote?: string | null
+  updatedAt?: string | null
+  outdatedVersion?: boolean
+}
+
+export interface ApplicantEvidenceField {
+  name: string
+  value: string
+  pageNumber?: number | null
+  /** Only ever present when the extractor recorded real coordinates. */
+  bbox?: { x0?: number; y0?: number; x1?: number; y1?: number; [k: string]: unknown } | null
+}
+
+export interface ApplicantEvidence {
+  findingId: string
+  reference: string
+  title: string
+  explanation: string
+  requestedCorrection?: string | null
+  documentId?: string | null
+  documentName: string
+  version?: number | null
+  currentVersion?: number | null
+  mimeType?: string
+  pageCount?: number | null
+  page?: number | null
+  pageReference?: string | null
+  snippet?: string | null
+  fields: ApplicantEvidenceField[]
+  clarificationId?: string | null
+  locationNote?: string
+}
+
+export interface ApplicantNextAction {
+  kind:
+    | 'respond_clarification'
+    | 'upload_documents'
+    | 'fix_document'
+    | 'submit_draft'
+    | 'continue_draft'
+  title: string
+  reason: string
+  applicationId: string
+  applicationNumber: string
+  clarificationId?: string | null
+  documentCode?: string | null
+}
+
+export interface ApplicantActivity {
+  id: string
+  source: 'system' | 'officer' | 'you'
+  label: string
+  detail?: string | null
+  applicationId: string
+  applicationNumber: string
+  timestamp: string
+}
+
+export interface ApplicantOverview {
+  active: number
+  actionRequired: number
+  underScrutiny: number
+  decisionRecorded: number
+  drafts: number
+  nextActions: ApplicantNextAction[]
+  recentActivity: ApplicantActivity[]
 }
 
 export interface ApplicantApplication {
@@ -661,6 +817,17 @@ export interface ApplicantApplication {
     statusLabel?: string
     note: string
   }>
+  stage: ApplicantStage
+  stageLabel: string
+  lifecycle: LifecycleStep[]
+  findings: ApplicantFinding[]
+  otherDocuments: ApplicantDocument[]
+  updatedAt?: string | null
+  contactEmail?: string | null
+  infoFields: PublicInfoField[]
+  infoProblems: Record<string, string>
+  configVersion?: number | null
+  configAvailable: boolean
 }
 
 export interface ApplicantApplicationSummary {
@@ -668,10 +835,15 @@ export interface ApplicantApplicationSummary {
   applicationNumber: string
   institutionName: string
   category: string
+  categoryCode?: string
   programName: string
   academicYear: string
   status: ApplicationStatus
   statusLabel: string
+  stage: ApplicantStage
+  stageLabel: string
+  updatedAt?: string | null
+  nextAction?: ApplicantNextAction | null
   submittedAt?: string | null
   openClarifications: number
   requiredTotal: number
@@ -692,7 +864,29 @@ export interface HandbookReference {
 }
 
 export type IssueSeverity = 'failed' | 'manual_review' | 'warning' | 'info'
-export type IssueStatus = 'open' | 'resolved' | 'waived' | 'accepted'
+export type IssueStatus = 'open' | 'resolved' | 'waived' | 'accepted' | 'superseded'
+
+/** Fine-grained officer lifecycle. IssueStatus stays the coarse open/closed view. */
+ export type FindingLifecycle =
+  | 'open'
+  | 'under_review'
+  | 'clarification_requested'
+  | 'reopened'
+  | 'resolved'
+  | 'waived'
+  | 'accepted'
+  | 'superseded'
+
+ export interface FindingTransition {
+  id: string
+  findingId: string
+  fromStatus: FindingLifecycle
+  toStatus: FindingLifecycle
+  actorName: string
+  actorRole: string
+  reason: string
+  createdAt: string
+}
 
 export interface IssueEvidence {
   text: string
@@ -715,6 +909,7 @@ export interface ScrutinyIssue {
   relatedDocuments: Array<{ id: string; name: string }>
   applicantAction?: string | null
   handbook: HandbookReference
+  lifecycleStatus?: FindingLifecycle
   findingIds: string[]
   checkIds: string[]
   occurrences: number
@@ -1009,4 +1204,72 @@ export interface AuditFacets {
 
 export interface AdminAuditDetail extends AdminAuditEvent {
   related: AdminAuditEvent[]
+}
+
+export interface ReadinessItem {
+  code: string
+  title: string
+  detail: string
+  requirementCode?: string | null
+}
+
+/** Server-computed pre-submission readiness (applicant-safe; not a compliance verdict). */
+export interface Readiness {
+  applicationId: string
+  status: ApplicationStatus
+  isDraft: boolean
+  mustFix: ReadinessItem[]
+  reviewRecommended: ReadinessItem[]
+  limitations: string[]
+  canSubmit: boolean
+  declarations: string[]
+}
+
+export interface SubmitResult {
+  applicationId: string
+  status: ApplicationStatus
+  alreadySubmitted: boolean
+  submittedAt?: string | null
+  message: string
+  warnings: string[]
+}
+
+export interface AppNotification {
+  id: string
+  kind: string
+  title: string
+  body: string
+  applicationId?: string | null
+  link?: string | null
+  createdAt: string
+  readAt?: string | null
+  isRead: boolean
+}
+
+export interface NotificationList {
+  items: AppNotification[]
+  unreadCount: number
+}
+
+export interface ProcessingJob {
+  id: string
+  kind: 'validation' | 'extraction'
+  applicationId: string
+  applicationNumber?: string | null
+  status: string
+  outcome: 'ok' | 'active' | 'failed' | 'needs_attention'
+  trigger?: string | null
+  createdAt: string
+  startedAt?: string | null
+  completedAt?: string | null
+  durationSeconds?: number | null
+  error?: string | null
+  detail?: string | null
+}
+
+export interface ProcessingJobList {
+  items: ProcessingJob[]
+  counts: Record<ProcessingJob['outcome'], number>
+  executionMode: string
+  message: string
 }

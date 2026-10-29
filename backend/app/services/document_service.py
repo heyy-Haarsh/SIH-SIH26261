@@ -24,6 +24,65 @@ from app.services.validation_service import run_validation
 _CHUNK = 1024 * 1024
 
 
+def _requirement_catalog(app: Application) -> list[dict]:
+    """The checklist the application is judged by: its pinned configuration snapshot."""
+    from app.services import category_config_service
+
+    out: list[dict] = []
+    for item in category_config_service.effective_requirements(app):
+        code = (item.get("code") or "").strip()
+        if not code:
+            continue
+        out.append(
+            {
+                "id": item.get("id"),
+                "code": code,
+                "name": (item.get("name") or code).strip(),
+                "mandatory": bool(item.get("mandatory", True)),
+                "allowed_types": list(item.get("allowed_types") or item.get("allowedTypes") or []),
+                "max_size_mb": item.get("max_size_mb"),
+            }
+        )
+    return out or list(DEFAULT_DOCS)
+
+def _retire_previous_results(db: Session, doc: Document, new_version: int) -> bool:
+    """Mark results for earlier versions stale. Returns True when a verification had run before."""
+    from app.models.doc_verification import DocumentVerificationCheck
+    from app.models.enums import (
+        DocumentReviewStatus,
+        ExternalVerificationLayerStatus,
+        RuleValidationStatus,
+    )
+
+    had_run = doc.latest_verification_run_id is not None
+    doc.rule_validation_status = RuleValidationStatus.PENDING
+    doc.external_verification_status = ExternalVerificationLayerStatus.PENDING
+    doc.review_status = DocumentReviewStatus.PENDING
+    doc.latest_verification_run_id = None
+    for check in db.query(DocumentVerificationCheck).filter(
+        DocumentVerificationCheck.document_id == doc.id, DocumentVerificationCheck.status == "open"
+    ):
+        check.status = "superseded"
+        check.resolution_reason = f"Replaced by version {new_version}; re-checked on the new version."
+    return had_run
+
+
+def _notify_processing(db: Session, app: Application, doc_name: str, version_no: int, state: str, message: str) -> None:
+    """Tell the institution what happened to a file they uploaded (in-app only)."""
+    from app.services import notification_service
+
+    is_draft = app.status == ApplicationStatus.DRAFT
+    if state == "ready" and is_draft:
+        return  # the wizard already shows this inline; avoid noise while drafting
+    kind = "processing_failed" if state == "failed" else "processing_completed"
+    title = {
+        "ready": f"{doc_name} (v{version_no}) was read successfully",
+        "limited": f"{doc_name} (v{version_no}) was read with limitations",
+        "failed": f"{doc_name} (v{version_no}) could not be read automatically",
+    }.get(state, f"{doc_name} (v{version_no}) was processed")
+    notification_service.notify_applicants(db, app, kind=kind, title=title, body=message)
+
+
 def _read_upload_capped(file: UploadFile, max_bytes: int) -> bytes:
     """Read upload in chunks; reject before buffering an oversized body fully."""
     chunks: list[bytes] = []
@@ -58,7 +117,14 @@ def upload_document(
             status_code=403, detail="Only applicants can upload documents in demo flow"
         )
 
-    app = db.query(Application).filter(Application.id == application_id).first()
+    from sqlalchemy.orm import joinedload
+
+    app = (
+        db.query(Application)
+        .options(joinedload(Application.category))
+        .filter(Application.id == application_id)
+        .first()
+    )
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     ensure_application_access(user, app)
@@ -75,12 +141,26 @@ def upload_document(
             },
         )
 
-    known = {r["code"] for r in DEFAULT_DOCS}
+    catalog = _requirement_catalog(app)
+    known = {r["code"] for r in catalog}
     if requirement_code not in known:
-        raise HTTPException(status_code=400, detail=f"Unknown requirement_code: {requirement_code}")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "unknown_requirement",
+                "message": (
+                    f"Requirement '{requirement_code}' is not on the checklist for this "
+                    f"application category. Choose a document from the category requirements."
+                ),
+            },
+        )
 
     settings = get_settings()
-    content = _read_upload_capped(file, runtime_config.max_upload_bytes())
+    requirement = next(r for r in catalog if r['code'] == requirement_code)
+    cap = runtime_config.max_upload_bytes()
+    if requirement.get('max_size_mb'):
+        cap = min(cap, int(requirement['max_size_mb']) * 1024 * 1024)
+    content = _read_upload_capped(file, cap)
     intake = LocalIntakeModule()
     result = intake.inspect(
         file_name=file.filename,
@@ -125,11 +205,12 @@ def upload_document(
         )
         .first()
     )
-    req_name = next(r["name"] for r in DEFAULT_DOCS if r["code"] == requirement_code)
+    req_name = next(r["name"] for r in catalog if r["code"] == requirement_code)
     if not doc:
         doc = Document(
             application_id=application_id,
             requirement_code=requirement_code,
+            requirement_id=requirement.get('id'),
             name=req_name,
             current_version=1,
             status=DocumentStatus.UPLOADED,
@@ -140,7 +221,9 @@ def upload_document(
     else:
         version_no = doc.current_version + 1
         doc.current_version = version_no
-        # Prior versions remain on disk/DB; current logical document is uploaded again.
+        if doc.requirement_id is None:
+            doc.requirement_id = requirement.get('id')
+        # Prior file versions remain on disk/DB; the slot stays the active uploaded document.
         doc.status = DocumentStatus.UPLOADED
 
     safe_name = result.file_name or Path(file.filename or "upload.bin").name
@@ -176,6 +259,10 @@ def upload_document(
     )
     db.add(version)
     db.flush()
+
+    # A replacement makes every earlier verification result describe an older file. Keep that
+    # history, but stop presenting it as the current state until the new version is re-checked.
+    had_verification = version_no > 1 and _retire_previous_results(db, doc, version_no)
 
     record_audit(
         db,
@@ -243,6 +330,21 @@ def upload_document(
             "Do not treat the application as compliant."
         )
 
+    if had_verification:
+        # Dependent checks ran against the previous file; run them again on this version.
+        try:
+            from app.verification_engine.pipeline import run_for_document
+
+            run_for_document(
+                db, doc, triggered_by=user, validation_run_id=validation_run_id, commit=True
+            )
+        except Exception as exc:  # noqa: BLE001 — the upload itself already succeeded
+            db.rollback()
+            pipeline_warnings.append(
+                f"Re-verification could not run ({exc.__class__.__name__}). "
+                "Earlier results are marked out of date and will be re-checked."
+            )
+
     if extraction_run_id and validation_run_id:
         from app.models.extraction import ExtractionRun
 
@@ -251,6 +353,22 @@ def upload_document(
             ext.validation_run_id = validation_run_id
             db.add(ext)
             db.commit()
+
+    if runtime_config.auto_extract_on_upload():
+        try:
+            from app.models.extraction import ExtractionRun as _Run
+            from app.services.applicant_findings_service import processing_info
+
+            run_row = (
+                db.query(_Run).filter(_Run.id == extraction_run_id).first() if extraction_run_id else None
+            )
+            state, message = (
+                processing_info(run_row) if run_row is not None else ("failed", "Automatic reading failed. Your file was saved.")
+            )
+            _notify_processing(db, app, req_name, version_no, state, message)
+            db.commit()
+        except Exception:  # noqa: BLE001 — a notification problem must never fail an upload
+            db.rollback()
 
     findings_out = []
     if validation_run_id:

@@ -20,3 +20,6 @@ class ApplicationCategory(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     required_documents: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Editable (draft) definition of the institution-facing information fields; published snapshots
+    # of it live in CategoryConfigVersion. See app.services.category_config_service.
+    info_fields: Mapped[list] = mapped_column(JSON, default=list, nullable=False)

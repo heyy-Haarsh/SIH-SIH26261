@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 from app.models.base import TimestampMixin, UTCDateTime, enum_type, new_id
 from app.models.category import ApplicationCategory
+from app.models.category_config import CategoryConfigVersion
 from app.models.enums import ApplicationStatus, Priority
 from app.models.user import Institution, User
 
@@ -38,6 +39,12 @@ class Application(Base, TimestampMixin):
     program_name: Mapped[str] = mapped_column(String(255), nullable=False)
     academic_year: Mapped[str] = mapped_column(String(16), nullable=False)
     contact_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    # The published category configuration this application is judged by (version-pinned).
+    config_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("category_config_versions.id"), index=True, nullable=True
+    )
+    # Values for the category's configured information fields, keyed by stable field key.
+    info_values: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
     status: Mapped[ApplicationStatus] = mapped_column(
         enum_type(ApplicationStatus), index=True, default=ApplicationStatus.DRAFT, nullable=False
@@ -59,6 +66,7 @@ class Application(Base, TimestampMixin):
 
     institution: Mapped[Institution] = relationship()
     category: Mapped[ApplicationCategory] = relationship()
+    config_version: Mapped[Optional["CategoryConfigVersion"]] = relationship(foreign_keys=[config_version_id])
     created_by: Mapped[Optional[User]] = relationship(foreign_keys=[created_by_id])
     assigned_officer: Mapped[Optional[User]] = relationship(foreign_keys=[assigned_officer_id])
     documents: Mapped[list["Document"]] = relationship(  # noqa: F821

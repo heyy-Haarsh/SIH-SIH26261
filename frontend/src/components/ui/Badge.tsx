@@ -15,22 +15,25 @@ interface BadgeProps {
   children: ReactNode
   tone?: Tone
   className?: string
+  /** Plain-language meaning (e.g. status vocabulary tooltips). */
+  title?: string
 }
 
 const tones: Record<Tone, string> = {
   neutral: 'bg-surface-muted text-ink-secondary border-border',
-  pass: 'bg-status-pass-bg text-status-pass border-emerald-200',
-  warning: 'bg-status-warning-bg text-status-warning border-amber-200',
-  failed: 'bg-status-failed-bg text-status-failed border-red-200',
-  pending: 'bg-status-pending-bg text-status-pending border-gray-200',
-  manual: 'bg-status-manual-bg text-status-manual border-violet-200',
-  info: 'bg-status-info-bg text-status-info border-sky-200',
-  brand: 'bg-brand-soft text-brand border-[#c5d4e6]',
+  pass: 'bg-status-pass-bg text-status-pass border-[#cfdad2]',
+  warning: 'bg-status-warning-bg text-status-warning border-[#e3d8bd]',
+  failed: 'bg-status-failed-bg text-status-failed border-[#e2cbc8]',
+  pending: 'bg-status-pending-bg text-status-pending border-border',
+  manual: 'bg-status-manual-bg text-status-manual border-[#d9d3e6]',
+  info: 'bg-status-info-bg text-status-info border-[#cbd8e6]',
+  brand: 'bg-brand-soft text-brand border-border-strong',
 }
 
-export function Badge({ children, tone = 'neutral', className }: BadgeProps) {
+export function Badge({ children, tone = 'neutral', className, title }: BadgeProps) {
   return (
     <span
+      title={title}
       className={clsx(
         'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap',
         tones[tone],

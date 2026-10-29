@@ -15,12 +15,14 @@ from app.schemas.common import (
     DeficiencyRespondIn,
     FindingOut,
     FindingResolveIn,
+    FindingTransitionIn,
+    FindingTransitionOut,
     WorkflowClarificationIn,
     WorkflowDecisionIn,
     WorkflowNoteIn,
     WorkflowResubmitIn,
 )
-from app.services import applicant_view_service, workflow_service
+from app.services import applicant_view_service, finding_lifecycle, workflow_service
 from app.services.serializers import deficiency_to_out, finding_to_out
 
 router = APIRouter(tags=["workflow"])
@@ -55,6 +57,8 @@ def request_clarification(
         title=body.title,
         description=body.description,
         finding_ids=body.finding_ids,
+        requires_replacement=body.requires_replacement,
+        due_date=body.due_date,
     )
 
 
@@ -164,3 +168,38 @@ def resolve_finding(
         db, user, finding_id, status=status, reason=body.reason
     )
     return finding_to_out(finding)
+
+@router.post("/findings/{finding_id}/transition", response_model=FindingOut)
+def transition_finding(
+    finding_id: str,
+    body: FindingTransitionIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.OFFICER)),
+):
+    """Officer lifecycle move (under review, request clarification, reopen, close) with history."""
+    try:
+        status = FindingStatus(body.status.strip().lower())
+    except ValueError as exc:
+        from app.core.errors import UnprocessableError
+
+        raise UnprocessableError(
+            "status must be one of: " + ", ".join(s.value for s in FindingStatus)
+        ) from exc
+    finding = workflow_service.transition_finding(
+        db, user, finding_id, status=status, reason=body.reason
+    )
+    return finding_to_out(finding)
+
+
+@router.get("/findings/{finding_id}/history", response_model=list[FindingTransitionOut])
+def finding_history(
+    finding_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.OFFICER, UserRole.REGIONAL_OFFICER)),
+):
+    from app.core.errors import NotFoundError
+    from app.models.validation import Finding
+
+    if db.query(Finding.id).filter(Finding.id == finding_id).first() is None:
+        raise NotFoundError("Finding not found")
+    return finding_lifecycle.history(db, finding_id)

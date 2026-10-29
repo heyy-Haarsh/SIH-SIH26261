@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import ForbiddenError, NotFoundError, UnprocessableError
 from app.models.application import Application
-from app.models.enums import ApplicationStatus, FindingStatus, UserRole
+from app.models.enums import ACTIVE_FINDING_VALUES, ApplicationStatus, FindingStatus, UserRole
 from app.models.user import User
 from app.models.validation import Finding
 from app.services.audit_service import record_audit
@@ -132,7 +132,7 @@ def officer_load(db: Session, officer_id: str) -> dict[str, Any]:
             1
             for f in findings_service.current_findings(db, app_id)
             if (f.status.value if hasattr(f.status, "value") else str(f.status))
-            == FindingStatus.OPEN.value
+            in ACTIVE_FINDING_VALUES
         )
 
     officer = db.get(User, officer_id)
@@ -274,6 +274,17 @@ def delegate(
             + (" (auto)" if auto or not officer_id else " (manual)")
         ),
         application_id=app.id,
+    )
+    from app.services import notification_service
+
+    notification_service.notify_user(
+        db,
+        officer.id,
+        kind="case_assigned",
+        title=f"{app.application_number} assigned to you",
+        body=f"{app.institution_name or 'An institution'} — {app.program_name}",
+        application_id=app.id,
+        link=notification_service.officer_link(app.id),
     )
     db.commit()
     db.refresh(app)

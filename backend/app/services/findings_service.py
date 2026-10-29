@@ -90,6 +90,9 @@ def prior_resolutions(db: Session, application_id: str) -> dict[str, tuple[Findi
     latest: dict[str, Finding] = {}
     for f in rows:
         latest[f.fingerprint] = f
+    # Carry forward every deliberate officer state; open and system-retired superseded start fresh.
     return {
-        fp: (f.status, f) for fp, f in latest.items() if f.status != FindingStatus.OPEN
+        fp: (f.status, f)
+        for fp, f in latest.items()
+        if f.status not in (FindingStatus.OPEN, FindingStatus.SUPERSEDED)
     }

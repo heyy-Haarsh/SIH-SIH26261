@@ -91,11 +91,15 @@ def test_metrics_match_the_application_list(client):
     assert next(a for a in apps if a["id"] == clar_app)["stage"] == "awaiting_applicant"
 
 
-def test_admin_overview_uses_the_same_numbers_as_the_officer_dashboard(client):
+def test_admin_overview_uses_the_same_numbers_as_the_regional_dashboard(client):
+    # The regional officer sees the whole region, so the admin overview must equal the
+    # region-wide metrics. A scrutiny officer's metrics are scoped to delegated applications.
     _create(client)
-    officer_view = client.get("/api/v1/applications/metrics", headers=OFFICER).json()
+    regional_view = client.get("/api/v1/applications/metrics", headers=ADMIN).json()
     admin_view = client.get("/api/v1/admin/stats", headers=ADMIN).json()
-    assert admin_view["applications"] == officer_view
+    assert admin_view["applications"] == regional_view
+    officer_view = client.get("/api/v1/applications/metrics", headers=OFFICER).json()
+    assert officer_view["total"] <= regional_view["total"]
 
 
 def test_applicant_and_officer_see_the_same_raw_status(client):

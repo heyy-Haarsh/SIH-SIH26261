@@ -15,7 +15,7 @@ const RISK_PLAIN: Record<
     label: 'For information',
     meaning: 'A neutral observation. No action is needed.',
     tone: 'info',
-    bar: 'border-l-sky-400',
+    bar: 'border-l-[#7f98b5]',
   },
   check_limitation: {
     label: 'A check could not be done',
@@ -29,21 +29,21 @@ const RISK_PLAIN: Record<
     meaning:
       'The file has an unusual technical property. Many genuine files do too; look at the original before drawing any conclusion.',
     tone: 'warning',
-    bar: 'border-l-amber-500',
+    bar: 'border-l-[#a98a4f]',
   },
   authenticity_concern: {
     label: 'Possible authenticity concern',
     meaning:
       'A stronger signal that the document may have been altered or is not what it claims. It is not proof. Examine the original and, if needed, ask the applicant to clarify.',
     tone: 'failed',
-    bar: 'border-l-red-500',
+    bar: 'border-l-[#a8665f]',
   },
   possible_duplicate: {
     label: 'Possible duplicate',
     meaning:
       'This file matches or closely resembles another upload. It may be an honest re-upload.',
     tone: 'manual',
-    bar: 'border-l-violet-500',
+    bar: 'border-l-[#8478a3]',
   },
 }
 
@@ -114,7 +114,7 @@ export function AuthenticityPanel({ detail, role, onChanged }: Props) {
       )}
 
       {(detail.forensicsLimitations ?? []).length > 0 && (
-        <div className="rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="rounded-[var(--radius-md)] border border-[#e3d8bd] bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
           <div className="mb-1 font-medium">What these checks could not do</div>
           <ul className="list-disc pl-4">
             {(detail.forensicsLimitations ?? []).map((l) => (

@@ -117,24 +117,28 @@ def seed_if_empty(db: Session) -> None:
                 email="registrar@demo-institute.edu",
                 role=UserRole.APPLICANT,
                 institution_id="inst-001",
+                is_active=True,
             ),
             User(
                 id="usr-off-001",
                 name="Rajesh Iyer",
                 email="officer.demo@aicte.example",
                 role=UserRole.OFFICER,
+                is_active=True,
             ),
             User(
                 id="usr-off-002",
                 name="Sneha Kulkarni",
                 email="officer2.demo@aicte.example",
                 role=UserRole.OFFICER,
+                is_active=True,
             ),
             User(
                 id="usr-adm-001",
                 name="Priya Nair",
                 email="regional.demo@praman.local",
                 role=UserRole.REGIONAL_OFFICER,
+                is_active=True,
             ),
         ]
     )
@@ -524,6 +528,10 @@ def seed_if_empty(db: Session) -> None:
     db.commit()
 
 
+# Accounts the frontend role switcher logs in as. They must stay active in demo mode.
+DEMO_SWITCHER_USER_IDS = ("usr-app-001", "usr-off-001", "usr-off-002", "usr-adm-001")
+
+
 def ensure_regional_demo_users(db: Session) -> None:
     """Idempotent: second scrutiny officer + regional role rename for existing demo DBs."""
     changed = False
@@ -534,14 +542,28 @@ def ensure_regional_demo_users(db: Session) -> None:
                 name="Sneha Kulkarni",
                 email="officer2.demo@aicte.example",
                 role=UserRole.OFFICER,
+                is_active=True,
             )
         )
         changed = True
+    # The role switcher cannot log in if a demo account was deactivated from Users & Roles.
+    for uid in DEMO_SWITCHER_USER_IDS:
+        u = db.get(User, uid)
+        if u is not None and not u.is_active:
+            u.is_active = True
+            changed = True
     regional = db.get(User, "usr-adm-001")
     if regional is not None and regional.role != UserRole.REGIONAL_OFFICER:
         regional.role = UserRole.REGIONAL_OFFICER
         if regional.email == "admin.demo@praman.local":
             regional.email = "regional.demo@praman.local"
         changed = True
+    # Seeded walkthrough applications must be visible to the demo scrutiny officer
+    # (officers only see applications delegated to them).
+    for seeded_id in ("app-1002", "app-1003"):
+        seeded = db.get(Application, seeded_id)
+        if seeded is not None and not seeded.assigned_officer_id:
+            seeded.assigned_officer_id = "usr-off-001"
+            changed = True
     if changed:
         db.commit()

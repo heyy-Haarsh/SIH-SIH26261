@@ -18,10 +18,10 @@ export const SEVERITY_TONE: Record<IssueSeverity, Tone> = {
 
 /** Left accent colour for issue / indicator cards. */
 export const SEVERITY_BAR: Record<IssueSeverity, string> = {
-  failed: 'border-l-red-500',
-  manual_review: 'border-l-violet-500',
-  warning: 'border-l-amber-500',
-  info: 'border-l-sky-400',
+  failed: 'border-l-[#a8665f]',
+  manual_review: 'border-l-[#8478a3]',
+  warning: 'border-l-[#a98a4f]',
+  info: 'border-l-[#7f98b5]',
 }
 
 export const STAGE_LABEL: Record<StageStatus, string> = {
@@ -56,6 +56,7 @@ export const STATUS_LABEL: Record<string, string> = {
   resolved: 'Resolved',
   waived: 'Waived',
   accepted: 'Accepted',
+  superseded: 'Superseded',
   passed: 'Passed',
 }
 

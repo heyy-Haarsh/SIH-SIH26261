@@ -23,6 +23,14 @@ export type BlurCheckResult = {
   score: number | null
   threshold: number
   pagesChecked: number
+  /** Pages with almost no ink. */
+  blankPages: number
+  /** PDF /Rotate or JPEG EXIF orientation, in degrees. Null when this file type has none. */
+  rotation: number | null
+  /** PDF asked for a password. */
+  locked: boolean
+  /** The file could not be opened. */
+  corrupt: boolean
   message: string
 }
 
@@ -30,6 +38,21 @@ type PageScore = {
   variance: number
   contentStd: number
   blank: boolean
+  rotation: number
+}
+
+function emptyScan(over: Partial<BlurCheckResult> & Pick<BlurCheckResult, 'applicable' | 'message'>): BlurCheckResult {
+  return {
+    blurry: false,
+    score: null,
+    threshold: BLUR_VARIANCE_THRESHOLD,
+    pagesChecked: 0,
+    blankPages: 0,
+    rotation: null,
+    locked: false,
+    corrupt: false,
+    ...over,
+  }
 }
 
 function extOf(file: File): string {
@@ -70,7 +93,7 @@ export function laplacianVariance(imageData: ImageData): PageScore {
   const contentStd = Math.sqrt(contentVar / gray.length)
 
   if (contentStd < MIN_CONTENT_STD) {
-    return { variance: 0, contentStd, blank: true }
+    return { variance: 0, contentStd, blank: true, rotation: 0 }
   }
 
   let lapSum = 0
@@ -86,10 +109,10 @@ export function laplacianVariance(imageData: ImageData): PageScore {
       n++
     }
   }
-  if (n === 0) return { variance: 0, contentStd, blank: true }
+  if (n === 0) return { variance: 0, contentStd, blank: true, rotation: 0 }
   const lapMean = lapSum / n
   const variance = lapSq / n - lapMean * lapMean
-  return { variance, contentStd, blank: false }
+  return { variance, contentStd, blank: false, rotation: 0 }
 }
 
 function drawToAnalyzeCanvas(
@@ -137,7 +160,8 @@ async function scorePdfFile(file: File): Promise<PageScore[]> {
       if (!ctx) throw new Error('Canvas 2D context unavailable')
       await page.render({ canvasContext: ctx, viewport, canvas }).promise
       const imageData = drawToAnalyzeCanvas(canvas, canvas.width, canvas.height)
-      scores.push(laplacianVariance(imageData))
+      const rotation = ((page.rotate % 360) + 360) % 360
+      scores.push({ ...laplacianVariance(imageData), rotation })
     }
   } finally {
     await loadingTask.destroy()
@@ -147,19 +171,20 @@ async function scorePdfFile(file: File): Promise<PageScore[]> {
 
 function verdictFromScores(scores: PageScore[], kind: 'image' | 'pdf'): BlurCheckResult {
   const threshold = BLUR_VARIANCE_THRESHOLD
+  const blankPages = scores.filter((s) => s.blank).length
+  const rotation = scores.find((s) => s.rotation && s.rotation !== 0)?.rotation ?? 0
   const usable = scores.filter((s) => !s.blank)
   if (usable.length === 0) {
-    return {
+    return emptyScan({
       applicable: true,
-      blurry: false,
-      score: null,
-      threshold,
       pagesChecked: scores.length,
+      blankPages,
+      rotation,
       message:
         kind === 'pdf'
           ? 'PDF pages look mostly blank — sharpness not scored. Upload will proceed.'
           : 'Image looks mostly blank — sharpness not scored. Upload will proceed.',
-    }
+    })
   }
 
   const minScore = Math.min(...usable.map((s) => s.variance))
@@ -170,24 +195,25 @@ function verdictFromScores(scores: PageScore[], kind: 'image' | 'pdf'): BlurChec
       : ''
 
   if (blurry) {
-    return {
+    return emptyScan({
       applicable: true,
       blurry: true,
       score: Math.round(minScore),
-      threshold,
       pagesChecked: scores.length,
+      blankPages,
+      rotation,
       message: `This ${kind === 'pdf' ? 'PDF' : 'image'} looks too blurry for reliable extraction (sharpness ${Math.round(minScore)} < ${threshold})${pageNote}. Retake or rescan a clearer copy.`,
-    }
+    })
   }
 
-  return {
+  return emptyScan({
     applicable: true,
-    blurry: false,
     score: Math.round(minScore),
-    threshold,
     pagesChecked: scores.length,
+    blankPages,
+    rotation,
     message: `Sharpness OK (${Math.round(minScore)} ≥ ${threshold})${pageNote}.`,
-  }
+  })
 }
 
 /**
@@ -196,14 +222,7 @@ function verdictFromScores(scores: PageScore[], kind: 'image' | 'pdf'): BlurChec
  */
 export async function checkFileBlur(file: File): Promise<BlurCheckResult> {
   if (!isBlurCheckable(file)) {
-    return {
-      applicable: false,
-      blurry: false,
-      score: null,
-      threshold: BLUR_VARIANCE_THRESHOLD,
-      pagesChecked: 0,
-      message: 'Blur check skipped for this file type.',
-    }
+    return emptyScan({ applicable: false, message: 'Blur check skipped for this file type.' })
   }
 
   try {
@@ -212,16 +231,45 @@ export async function checkFileBlur(file: File): Promise<BlurCheckResult> {
       return verdictFromScores(scores, 'pdf')
     }
     const score = await scoreRasterFile(file)
-    return verdictFromScores([score], 'image')
+    const rotation = await readJpegOrientation(file)
+    return verdictFromScores([{ ...score, rotation: rotation ?? 0 }], 'image')
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown error'
-    return {
+    const name = err && typeof err === 'object' && 'name' in err ? String((err as { name: string }).name) : ''
+    const locked = /password/i.test(`${name} ${detail}`)
+    return emptyScan({
       applicable: true,
-      blurry: false,
-      score: null,
-      threshold: BLUR_VARIANCE_THRESHOLD,
-      pagesChecked: 0,
-      message: `Could not run blur check (${detail}). Upload is still allowed.`,
-    }
+      locked,
+      corrupt: !locked,
+      message: locked
+        ? 'This file is password-protected.'
+        : `Could not open this file (${detail}).`,
+    })
   }
+}
+
+/** JPEG EXIF orientation as degrees (0, 90, 180, 270), or null if there is no tag. */
+async function readJpegOrientation(file: File): Promise<number | null> {
+  if (!['jpg', 'jpeg'].includes(extOf(file)) && !file.type.toLowerCase().includes('jpeg')) return null
+  const bytes = new Uint8Array(await file.slice(0, 128 * 1024).arrayBuffer())
+  for (let i = 0; i < bytes.length - 10; i++) {
+    if (bytes[i] !== 0xff || bytes[i + 1] !== 0xe1) continue
+    if (String.fromCharCode(...bytes.slice(i + 4, i + 10)) !== 'Exif\0\0') continue
+    const view = new DataView(bytes.buffer, bytes.byteOffset + i + 10)
+    const le = view.getUint16(0) === 0x4949
+    const count = view.getUint16(8, le)
+    for (let t = 0; t < count; t++) {
+      const off = 10 + t * 12
+      if (off + 12 > view.byteLength) break
+      if (view.getUint16(off, le) === 0x0112) {
+        const value = view.getUint16(off + 8, le)
+        if (value === 3) return 180
+        if (value === 6 || value === 7) return 90
+        if (value === 8 || value === 5) return 270
+        return 0
+      }
+    }
+    return 0
+  }
+  return null
 }

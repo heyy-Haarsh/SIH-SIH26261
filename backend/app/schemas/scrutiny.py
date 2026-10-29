@@ -37,7 +37,9 @@ class ScrutinyIssueOut(CamelModel):
     title: str
     explanation: str
     severity: str  # failed | manual_review | warning | info
-    status: str  # open | resolved | waived | accepted
+    status: str  # open | resolved | waived | accepted | superseded (coarse: open == still active)
+    # Fine-grained lifecycle: open | under_review | clarification_requested | reopened | resolved | …
+    lifecycle_status: str = "open"
     source: str  # rule | document_rule | external | reconciliation | forensics | classification | file
     layer: str  # intake | classification | layer1 | layer2 | cross_document | layer3
     document_id: str | None = None

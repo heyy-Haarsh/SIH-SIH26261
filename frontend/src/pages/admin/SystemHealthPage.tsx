@@ -5,13 +5,14 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { SkeletonCard, SkeletonTable } from '@/components/ui/Skeleton'
 import { HealthBadge, overallLabel } from '@/components/admin/HealthBadge'
 import { errorText } from '@/components/scrutiny/scrutinyUi'
 import { useRole } from '@/app/RoleContext'
 import { useRefreshable } from '@/hooks/useRefreshable'
 import { formatDateTime } from '@/lib/format'
 import { api } from '@/services/api'
-import type { HealthComponent, SystemHealth } from '@/types'
+import type { HealthComponent, ProcessingJob, ProcessingJobList, SystemHealth } from '@/types'
 
 export function SystemHealthPanel({ health }: { health: SystemHealth }) {
   const overall = overallLabel(health.status)
@@ -135,6 +136,101 @@ function Stat({
   )
 }
 
+const OUTCOME_LABEL: Record<ProcessingJob['outcome'], string> = {
+  ok: 'Completed',
+  active: 'In progress',
+  failed: 'Failed',
+  needs_attention: 'Needs attention',
+}
+const OUTCOME_TONE: Record<ProcessingJob['outcome'], 'pass' | 'info' | 'failed' | 'warning'> = {
+  ok: 'pass',
+  active: 'info',
+  failed: 'failed',
+  needs_attention: 'warning',
+}
+
+/** Recent validation and extraction runs, read from the run records themselves. */
+export function ProcessingJobs({ role }: { role: string }) {
+  const [outcome, setOutcome] = useState('')
+  const { data, loading, error } = useRefreshable<ProcessingJobList>(
+    () => api.listProcessingJobs(role, outcome ? { outcome } : undefined),
+    `${role}:${outcome}`,
+  )
+  return (
+    <Card className="mt-4">
+      <CardHeader
+        title="Processing jobs"
+        description={data?.message ?? 'Recent validation and extraction runs'}
+        action={
+          <select
+            aria-label="Filter jobs by outcome"
+            value={outcome}
+            onChange={(e) => setOutcome(e.target.value)}
+            className="rounded border border-border bg-white px-2 py-1 text-xs"
+          >
+            <option value="">All outcomes</option>
+            {Object.entries(OUTCOME_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        }
+      />
+      {error && !data && (
+        <p role="alert" className="text-xs text-status-failed">
+          {error}
+        </p>
+      )}
+      {loading && !data && (
+        <div className="py-2">
+          <SkeletonTable rows={4} cols={6} />
+        </div>
+      )}
+      {data && data.items.length === 0 && (
+        <p className="text-xs text-ink-muted">No runs match this filter.</p>
+      )}
+      {data && data.items.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="text-[11px] uppercase tracking-wide text-ink-muted">
+              <tr>
+                <th className="py-1 pr-3">Run</th>
+                <th className="py-1 pr-3">Application</th>
+                <th className="py-1 pr-3">Result</th>
+                <th className="py-1 pr-3">Started</th>
+                <th className="py-1 pr-3">Took</th>
+                <th className="py-1">Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.slice(0, 25).map((j) => (
+                <tr key={j.id} className="border-t border-border align-top">
+                  <td className="py-1.5 pr-3 capitalize">{j.kind}</td>
+                  <td className="py-1.5 pr-3">
+                    <Link to={`/officer/applications/${j.applicationId}`} className="text-accent underline">
+                      {j.applicationNumber ?? j.applicationId.slice(0, 8)}
+                    </Link>
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <Badge tone={OUTCOME_TONE[j.outcome]}>{OUTCOME_LABEL[j.outcome]}</Badge>
+                    <span className="ml-1 text-ink-muted">{j.status.replace(/_/g, ' ')}</span>
+                  </td>
+                  <td className="py-1.5 pr-3">{formatDateTime(j.startedAt ?? j.createdAt)}</td>
+                  <td className="py-1.5 pr-3">
+                    {typeof j.durationSeconds === 'number' ? `${j.durationSeconds}s` : '—'}
+                  </td>
+                  <td className="py-1.5 text-status-failed">{j.error ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export function SystemHealthPage() {
   const { role } = useRole()
   const { data, loading, error, reload, refreshing } = useRefreshable<SystemHealth>(
@@ -197,8 +293,15 @@ export function SystemHealthPage() {
           {msg ?? error}
         </p>
       )}
-      {loading && <p className="text-sm text-ink-muted">Checking services…</p>}
+      {loading && !data && (
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} lines={3} />
+          ))}
+        </div>
+      )}
       {data && <SystemHealthPanel health={data} />}
+      <ProcessingJobs role={role} />
     </AppShell>
   )
 }

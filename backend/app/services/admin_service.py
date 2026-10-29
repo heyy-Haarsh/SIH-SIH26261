@@ -210,6 +210,12 @@ def update_user(db: Session, actor: User, user_id: str, data: dict[str, Any]) ->
         raise UnprocessableError("Applicants must be linked to an institution.")
     if u.id == actor.id and data.get("is_active") is False:
         raise UnprocessableError("You cannot deactivate your own admin account.")
+    from app.core.seed import DEMO_SWITCHER_USER_IDS
+
+    if u.id in DEMO_SWITCHER_USER_IDS and data.get("is_active") is False:
+        raise UnprocessableError(
+            "The role-switcher demo accounts cannot be deactivated. Create another user to try that flow."
+        )
     if changes and len(reason) < 3:
         raise UnprocessableError("change_reason (≥3 chars) is required when modifying a user.")
     record_audit(
@@ -292,6 +298,9 @@ def create_category(db: Session, actor: User, data: dict[str, Any]) -> Applicati
     )
     db.add(cat)
     db.flush()
+    from app.services import category_config_service as _ccs
+
+    _ccs.ensure_category_baseline(db, cat)
     record_audit(
         db,
         action="admin.category_created",
@@ -324,9 +333,11 @@ def update_category(db: Session, actor: User, category_id: str, data: dict[str, 
     if data.get("description") is not None:
         cat.description = str(data["description"]).strip()
         changes.append("description")
+    legacy_docs_changed = False
     if data.get("required_documents") is not None:
         cat.required_documents = _normalize_docs(data["required_documents"])
         changes.append(f"docs={len(cat.required_documents)}")
+        legacy_docs_changed = True
     if data.get("is_active") is not None:
         cat.is_active = bool(data["is_active"])
         changes.append(f"active={cat.is_active}")
@@ -343,6 +354,17 @@ def update_category(db: Session, actor: User, category_id: str, data: dict[str, 
         entity_id=cat.id,
     )
     db.commit()
+    if legacy_docs_changed:
+        # Keep the older checklist editor working: mirror it into the requirement model and
+        # publish, so the change reaches new applications as it always did.
+        from app.services import category_config_service as _ccs
+
+        _ccs.sync_requirements_from_json(db, cat, cat.required_documents)
+        db.commit()
+        try:
+            _ccs.publish(db, actor, cat.id, note="Updated through the checklist editor")
+        except (UnprocessableError, ConflictError):
+            pass  # left as unpublished changes for the category page to resolve
     db.refresh(cat)
     return cat
 

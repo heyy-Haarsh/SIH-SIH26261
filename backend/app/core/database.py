@@ -113,8 +113,13 @@ _ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("findings", "resolution_reason", "TEXT"),
     ("findings", "resolved_at", "DATETIME"),
     ("users", "last_delegated_at", "DATETIME"),
+    ("deficiency_notices", "requires_replacement", "BOOLEAN NOT NULL DEFAULT 0"),
     ("handbook_references", "academic_year", "VARCHAR(32) NOT NULL DEFAULT ''"),
     ("handbook_references", "applicable_categories", "VARCHAR(255) NOT NULL DEFAULT ''"),
+    ("application_categories", "info_fields", "JSON NOT NULL DEFAULT '[]'"),
+    ("applications", "config_version_id", "VARCHAR(36)"),
+    ("applications", "info_values", "JSON NOT NULL DEFAULT '{}'"),
+    ("documents", "requirement_id", "VARCHAR(36)"),
 )
 
 

@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { api } from '@/services/api'
 import type { DocumentIssueGroup, ScrutinyIssue, ScrutinyReview } from '@/types'
 import { HandbookBadge } from './HandbookBadge'
+import { FindingLifecycleControls, LIFECYCLE_LABEL } from './FindingLifecycle'
 import { ResolveControl } from './ResolveControl'
 import {
   LAYER_LABEL,
@@ -63,7 +64,7 @@ export function IssuesPanel({ review, role, onOpenDocument, onChanged }: Props) 
 
       {/* Missing documents */}
       {review.missingDocuments.length > 0 && (
-        <div className="rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="rounded-[var(--radius-md)] border border-[#e3d8bd] bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
           <span className="font-semibold">Not uploaded yet: </span>
           {review.missingDocuments
             .map((m) => `${m.name}${m.mandatory ? '' : ' (optional)'}`)
@@ -192,6 +193,7 @@ function IssueRow({
     issue.relatedDocuments.length > 0 ||
     issue.evidence.length > 0 ||
     resolvable ||
+    (canResolve && issue.findingIds.length > 0) ||
     issue.handbook.status === 'verified'
 
   async function resolve(status: Resolution, reason: string) {
@@ -232,6 +234,9 @@ function IssueRow({
             <Badge tone={SEVERITY_TONE[issue.severity]}>{SEVERITY_LABEL[issue.severity]}</Badge>
             {!isOpen && (
               <Badge tone="neutral">{STATUS_LABEL[issue.status] ?? issue.status}</Badge>
+            )}
+            {isOpen && issue.lifecycleStatus && issue.lifecycleStatus !== 'open' && (
+              <Badge tone="info">{LIFECYCLE_LABEL[issue.lifecycleStatus] ?? issue.lifecycleStatus}</Badge>
             )}
             <span className="text-sm font-medium text-ink">{issue.title}</span>
             {issue.occurrences > 1 && (
@@ -307,7 +312,7 @@ function IssueRow({
               </h4>
               {issue.applicantAction && (
                 <p className="mt-1 flex items-start gap-1.5 text-sm text-ink-secondary">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0 text-status-warning" />
                   <span>{issue.applicantAction}</span>
                 </p>
               )}
@@ -340,6 +345,13 @@ function IssueRow({
               }}
             />
           )}
+
+          <FindingLifecycleControls
+            issue={issue}
+            role={role}
+            canAct={canResolve}
+            onChanged={onChanged}
+          />
         </div>
       )}
     </li>

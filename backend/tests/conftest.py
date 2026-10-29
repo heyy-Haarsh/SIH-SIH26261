@@ -27,6 +27,26 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 
 
+DEMO_OFFICER_ID = "usr-off-001"
+
+
+@pytest.fixture(autouse=True)
+def _deterministic_officer_assignment(request, monkeypatch):
+    """Auto-delegation load-balances across officers. Most tests model a single demo officer
+    who sees every submission, so pin assignment to that officer. `test_delegation.py` exercises
+    the real load balancer and is left untouched."""
+    if request.node.fspath.basename == "test_delegation.py":
+        return
+    from app.models.user import User
+    from app.services import delegation_service
+
+    monkeypatch.setattr(
+        delegation_service,
+        "select_officer",
+        lambda db: db.get(User, DEMO_OFFICER_ID),
+    )
+
+
 @pytest.fixture()
 def client():
     TEST_UPLOADS.mkdir(parents=True, exist_ok=True)

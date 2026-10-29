@@ -66,7 +66,7 @@ describe('role navigation', () => {
     )
     expect(screen.getByText('Operations')).toBeTruthy()
     expect(screen.getByText('Handbook References')).toBeTruthy()
-    expect(screen.queryByText('Application Queue')).toBeNull()
+    expect(screen.queryByText('My Queue')).toBeNull()
   })
 })
 

@@ -118,8 +118,9 @@ describe('HandbookBadge', () => {
   })
 
   it('never renders a clause for an unverified reference', () => {
-    render(<HandbookBadge reference={{ ...unverified, section: '9.9' }} />)
-    expect(screen.getByText('Handbook reference not verified')).toBeTruthy()
+    // An unverified reference renders nothing at all — no guessed clause, no placeholder.
+    const { container } = render(<HandbookBadge reference={{ ...unverified, section: '9.9' }} />)
+    expect(container.textContent).toBe('')
     expect(screen.queryByText(/9\.9/)).toBeNull()
   })
 })
@@ -152,8 +153,9 @@ describe('IssuesPanel', () => {
   it('records a resolution against the underlying finding and refreshes', async () => {
     const onChanged = vi.fn()
     render(<IssuesPanel review={review()} role="officer" onOpenDocument={() => {}} onChanged={onChanged} />)
-    // Expand the issue first
+    // Expand the issue, then open the resolve control
     fireEvent.click(screen.getByText('Institution name is missing'))
+    fireEvent.click(screen.getByText('Resolve…'))
     fireEvent.click(screen.getByText('Draft note'))
     expect((screen.getByLabelText('Officer note') as HTMLTextAreaElement).value.length).toBeGreaterThan(5)
     fireEvent.change(screen.getByPlaceholderText(/Explain why this is resolved/), {
@@ -171,8 +173,9 @@ describe('IssuesPanel', () => {
 
   it('requires a reason before resolving', () => {
     render(<IssuesPanel review={review()} role="officer" onOpenDocument={() => {}} onChanged={() => {}} />)
-    // Expand first
+    // Expand first, then open the resolve control
     fireEvent.click(screen.getByText('Institution name is missing'))
+    fireEvent.click(screen.getByText('Resolve…'))
     fireEvent.click(screen.getByText('Mark resolved'))
     expect(screen.getByText(/at least 5 characters/)).toBeTruthy()
     expect(api.resolveFinding).not.toHaveBeenCalled()

@@ -50,6 +50,8 @@ class Document(Base, TimestampMixin):
         enum_type(DocumentReviewStatus), default=DocumentReviewStatus.PENDING, nullable=False
     )
     latest_verification_run_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    # Stable id of the category requirement this document answers (requirement_code stays for display).
+    requirement_id: Mapped[Optional[str]] = mapped_column(String(36), index=True, nullable=True)
 
     application: Mapped[Application] = relationship(back_populates="documents")
     versions: Mapped[list["DocumentVersion"]] = relationship(

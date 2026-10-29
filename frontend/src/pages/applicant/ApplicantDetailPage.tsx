@@ -6,6 +6,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { SkeletonDetailLayout } from '@/components/ui/Skeleton'
 import { Textarea } from '@/components/ui/Input'
 import { DocumentUploadControl } from '@/components/applicant/DocumentUploadControl'
 import {
@@ -27,7 +28,12 @@ import {
 } from '@/lib/applicantStatus'
 import { formatBytes } from '@/lib/fileValidation'
 import { formatDate, formatDateTime } from '@/lib/format'
-import type { ApplicantApplication, ApplicantDeficiency, ApplicantRequirement } from '@/types'
+import type {
+  ApplicantApplication,
+  ApplicantDeficiency,
+  ApplicantRequirement,
+  Readiness,
+} from '@/types'
 
 const MIN_RESPONSE = 5
 
@@ -41,6 +47,20 @@ export function ApplicantDetailPage() {
     id && role === 'applicant' ? load : null,
     `${id}:${role}`,
   )
+
+  // Readiness is computed by the server (pre-submission checks), not derived in the browser.
+  const loadReadiness = useCallback(() => api.getReadiness(role, id as string), [id, role])
+  const { data: readiness, reload: reloadReadiness } = useRefreshable<Readiness>(
+    id && role === 'applicant' ? loadReadiness : null,
+    `readiness:${id}:${role}`,
+  )
+  const [submitting, setSubmitting] = useState(false)
+  const [submitMsg, setSubmitMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+  const [declared, setDeclared] = useState(false)
+  const refreshAll = useCallback(() => {
+    void reload()
+    void reloadReadiness()
+  }, [reload, reloadReadiness])
 
   const breadcrumbs = ['Applicant', 'My Applications', data?.applicationNumber ?? '…']
 
@@ -68,7 +88,7 @@ export function ApplicantDetailPage() {
   if (loading && !data) {
     return (
       <AppShell title="Application" breadcrumbs={breadcrumbs}>
-        <p className="text-sm text-ink-muted">Loading application…</p>
+        <SkeletonDetailLayout />
       </AppShell>
     )
   }
@@ -93,12 +113,59 @@ export function ApplicantDetailPage() {
   }
 
   const openClarifications = data.deficiencies.filter((d) => d.status === 'open')
+  const missingMandatory = data.requirements.filter(
+    (r) => r.mandatory && r.uploadStatus === 'not_uploaded',
+  )
+  const needsAttention = data.requirements.filter((r) => r.uploadStatus === 'needs_attention')
+  const isDraft = data.status === 'draft'
+
+  async function submit() {
+    if (!data) return
+    setSubmitting(true)
+    setSubmitMsg(null)
+    try {
+      const result = await api.submitApplication(role, data.id, true)
+      setSubmitMsg({
+        tone: 'ok',
+        text: result.alreadySubmitted
+          ? 'This application had already been submitted — nothing was sent twice.'
+          : result.message,
+      })
+      refreshAll()
+    } catch (err) {
+      setSubmitMsg({
+        tone: 'err',
+        text:
+          err instanceof ApiError
+            ? err.message
+            : 'Could not submit the application. Please try again.',
+      })
+      refreshAll()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const nextAction =
+    openClarifications.length > 0
+      ? 'Respond to clarification requests, then resubmit.'
+      : isDraft
+        ? readiness?.canSubmit
+          ? 'All required documents are in. Review the readiness check, then submit.'
+          : 'Upload all mandatory documents, then review readiness and submit.'
+        : data.canResubmit
+          ? 'You can resubmit after answering open clarifications.'
+          : data.statusMessage
 
   return (
-    <AppShell title={data.applicationNumber} breadcrumbs={breadcrumbs}>
+    <AppShell
+      title={data.applicationNumber}
+      description={nextAction}
+      breadcrumbs={breadcrumbs}
+    >
       <div className="space-y-5">
         {error && (
-          <div className="rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <div className="rounded-[var(--radius-md)] border border-[#e3d8bd] bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
             Could not refresh the latest status: {error}
           </div>
         )}
@@ -122,6 +189,175 @@ export function ApplicantDetailPage() {
             Required documents uploaded: {data.requiredUploaded} of {data.requiredTotal}
           </p>
         </Card>
+
+        {isDraft && (
+          <Card>
+            <CardHeader
+              title="Pre-submission readiness"
+              description="Your application is a private draft. Nothing reaches a scrutiny officer until you submit it."
+            />
+            {!readiness ? (
+              <p className="text-xs text-ink-muted">Checking readiness…</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-status-failed">
+                      Must fix before submitting
+                    </h3>
+                    <ul className="mt-2 space-y-1.5 text-xs text-ink-secondary">
+                      {readiness.mustFix.map((i) => (
+                        <li key={`${i.code}:${i.requirementCode ?? i.title}`}>
+                          <span className="font-medium text-ink">{i.title}</span>
+                          {i.detail && <span className="block text-ink-muted">{i.detail}</span>}
+                        </li>
+                      ))}
+                      {readiness.mustFix.length === 0 && (
+                        <li className="text-ink-muted">Nothing blocks submission.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-status-warning">
+                      Review recommended
+                    </h3>
+                    <ul className="mt-2 space-y-1.5 text-xs text-ink-secondary">
+                      {readiness.reviewRecommended.map((i) => (
+                        <li key={`${i.code}:${i.requirementCode ?? i.title}`}>
+                          <span className="font-medium text-ink">{i.title}</span>
+                          {i.detail && <span className="block text-ink-muted">{i.detail}</span>}
+                        </li>
+                      ))}
+                      {readiness.reviewRecommended.length === 0 && (
+                        <li className="text-ink-muted">No review-recommended items right now.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                      Limitations of these checks
+                    </h3>
+                    <ul className="mt-2 space-y-1.5 text-xs text-ink-secondary">
+                      {readiness.limitations.map((l) => (
+                        <li key={l}>{l}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                {(() => {
+                  const decls = readiness.declarations ?? []
+                  const hasDeclarations = decls.length > 0
+                  return (
+                    <div className="space-y-2 border-t border-border pt-3">
+                      {hasDeclarations && (
+                        <>
+                          <ul className="list-disc pl-4 text-xs text-ink-secondary">
+                            {decls.map((d) => <li key={d}>{d}</li>)}
+                          </ul>
+                          <label className="flex items-start gap-2 text-xs text-ink-secondary">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={declared}
+                              onChange={(e) => setDeclared(e.target.checked)}
+                            />
+                            I confirm these declarations.
+                          </label>
+                        </>
+                      )}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button
+                          disabled={!readiness.canSubmit || submitting || (hasDeclarations && !declared)}
+                          onClick={() => void submit()}
+                        >
+                          {submitting ? 'Submitting…' : 'Submit for scrutiny'}
+                        </Button>
+                        {!readiness.canSubmit && (
+                          <span className="text-xs text-ink-muted">
+                            Fix the items marked "must fix" to enable submission.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+            {submitMsg && (
+              <p
+                role="status"
+                className={`mt-3 text-xs ${submitMsg.tone === 'ok' ? 'text-status-pass' : 'text-status-failed'}`}
+              >
+                {submitMsg.text}
+              </p>
+            )}
+          </Card>
+        )}
+
+        {!isDraft && (
+        <Card>
+          <CardHeader
+            title="Readiness review"
+            description="Pre-submission and correction readiness. This is not an official compliance verdict."
+          />
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-status-failed">Must fix</h3>
+              <ul className="mt-2 space-y-1 text-xs text-ink-secondary">
+                {missingMandatory.map((r) => (
+                  <li key={r.code}>Required document missing: {r.name}</li>
+                ))}
+                {openClarifications.map((d) => (
+                  <li key={d.id}>Open clarification: {d.title}</li>
+                ))}
+                {data.resubmitBlockers.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+                {missingMandatory.length === 0 &&
+                  openClarifications.length === 0 &&
+                  data.resubmitBlockers.length === 0 && (
+                    <li className="text-ink-muted">No mandatory blockers from the applicant side.</li>
+                  )}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-status-warning">
+                Review recommended
+              </h3>
+              <ul className="mt-2 space-y-1 text-xs text-ink-secondary">
+                {needsAttention.map((r) => (
+                  <li key={r.code}>
+                    {r.name}: type or readability needs attention
+                  </li>
+                ))}
+                {(data.corrections?.length ?? 0) > 0 && (
+                  <li>{data.corrections!.length} correction item(s) from the officer</li>
+                )}
+                {needsAttention.length === 0 && (data.corrections?.length ?? 0) === 0 && (
+                  <li className="text-ink-muted">No review-recommended items right now.</li>
+                )}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                Processing limitations
+              </h3>
+              <ul className="mt-2 space-y-1 text-xs text-ink-secondary">
+                <li>
+                  Type match and clarity are automatic pre-checks, not authenticity results.
+                </li>
+                <li>
+                  External issuer confirmation is separate and may show unavailable or simulated
+                  for the officer — that is not counted as your non-compliance here.
+                </li>
+                {policy && !policy.marathiSupported && (
+                  <li>Marathi OCR language data is not installed on this server.</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </Card>
+        )}
 
         {(data.officerDecision ||
           (data.corrections && data.corrections.length > 0) ||
@@ -169,7 +405,7 @@ export function ApplicantDetailPage() {
           <ClarificationSection
             app={data}
             openCount={openClarifications.length}
-            onChanged={reload}
+            onChanged={refreshAll}
           />
         )}
 
@@ -205,7 +441,7 @@ export function ApplicantDetailPage() {
                     applicationId={data.id}
                     canUpload={data.canUpload}
                     filePolicy={filePolicy}
-                    onChanged={reload}
+                    onChanged={refreshAll}
                   />
                 ))}
               </tbody>
@@ -386,7 +622,7 @@ function ClarificationSection({
   const awaitingResubmit = app.status === 'clarification_required' || app.status === 'deficiency'
 
   return (
-    <Card className={openCount > 0 || awaitingResubmit ? 'border-amber-300' : undefined}>
+    <Card className={openCount > 0 || awaitingResubmit ? 'border-[#e3d8bd]' : undefined}>
       <CardHeader
         title="Clarification requests"
         description={
@@ -413,6 +649,20 @@ function ClarificationSection({
                 }
               />
             </div>
+            {d.linkedItems && d.linkedItems.length > 0 && (
+              <div className="mt-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  Items this request covers
+                </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-ink-secondary">
+                  {d.linkedItems.map((item) => (
+                    <li key={`${item.documentName}:${item.summary}`}>
+                      <span className="font-medium text-ink">{item.documentName}</span> — {item.summary}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {d.applicantResponse && (
               <p className="mt-2 text-xs text-ink-muted">Your response: {d.applicantResponse}</p>
             )}
@@ -437,7 +687,7 @@ function ClarificationSection({
         <div className="mt-4 space-y-2 border-t border-border pt-4">
           <h3 className="text-sm font-medium text-ink">Resubmit for review</h3>
           {app.resubmitBlockers.length > 0 ? (
-            <ul className="list-disc pl-5 text-xs text-amber-900">
+            <ul className="list-disc pl-5 text-xs text-status-warning">
               {app.resubmitBlockers.map((b) => (
                 <li key={b}>{b}</li>
               ))}

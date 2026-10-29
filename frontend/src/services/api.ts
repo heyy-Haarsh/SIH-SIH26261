@@ -9,6 +9,7 @@ import type {
   RuleImportValidation,
   RuleUsage,
   SystemHealth,
+  ProcessingJobList,
   AdminCategory,
   AdminInstitution,
   AdminRule,
@@ -18,6 +19,27 @@ import type {
   ApiHealth,
   ApplicantApplication,
   ApplicantApplicationSummary,
+  ApplicantCategoryOption,
+  ApplicantDeficiency,
+  ConfigCategoryDetail,
+  ConfigCategorySummary,
+  ConfigRequirement,
+  ConfigRule,
+  InfoFieldDef,
+  PublicCategoryConfig,
+  RequirementRulesResponse,
+  RuleCheckRow,
+  RuleDefinitionSchema,
+  RuleDryRunResult,
+  RuleSuggestion,
+  RuleValidationReport,
+  ApplicantEvidence,
+  ApplicantOverview,
+  AppNotification,
+  FindingTransition,
+  NotificationList,
+  Readiness,
+  SubmitResult,
   ApplicationDetail,
   ApplicationMetrics,
   ApplicationSummary,
@@ -163,8 +185,22 @@ export interface UploadDocumentResult {
 export const api = {
   health: () => request<ApiHealth>('/health'),
 
-  listApplications: (role: string) =>
-    request<ApplicationSummary[]>('/applications', { role }),
+  listApplications: (
+    role: string,
+    params?: {
+      status?: string
+      category_code?: string
+      has_clarification_response?: boolean
+    },
+  ) => {
+    const q = new URLSearchParams()
+    if (params?.status) q.set('status', params.status)
+    if (params?.category_code) q.set('category_code', params.category_code)
+    if (params?.has_clarification_response != null)
+      q.set('has_clarification_response', String(params.has_clarification_response))
+    const qs = q.toString()
+    return request<ApplicationSummary[]>(`/applications${qs ? `?${qs}` : ''}`, { role })
+  },
 
   applicationMetrics: (role: string) =>
     request<ApplicationMetrics>('/applications/metrics', { role }),
@@ -179,7 +215,70 @@ export const api = {
   getMyApplication: (id: string, role: string) =>
     request<ApplicantApplication>(`/applicant/applications/${id}`, { role }),
 
+  listNotifications: (role: string) => request<NotificationList>('/notifications', { role }),
+
+  markNotificationRead: (role: string, id: string) =>
+    request<AppNotification>(`/notifications/${id}/read`, { method: 'POST', role }),
+
+  markAllNotificationsRead: (role: string) =>
+    request<{ marked: number }>('/notifications/read-all', { method: 'POST', role }),
+
+  getReadiness: (role: string, applicationId: string) =>
+    request<Readiness>(`/applications/${applicationId}/readiness`, { role }),
+
+  /** The server requires the applicant's declarations to be confirmed; repeating a submit is safe. */
+  submitApplication: (role: string, applicationId: string, confirmDeclarations: boolean) =>
+    request<SubmitResult>(`/applications/${applicationId}/submit`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm_declarations: confirmDeclarations }),
+    }),
+
+  /** Autosave of a private draft. Only the owner's draft can be changed (409 otherwise). */
+  updateDraft: (
+    role: string,
+    applicationId: string,
+    body: Partial<{
+      category_code: string
+      institution_name: string
+      program_name: string
+      academic_year: string
+      info_values: Record<string, unknown>
+    }>,
+  ) =>
+    request<ApplicantApplication>(`/applications/${applicationId}`, {
+      method: 'PATCH',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  getApplicantOverview: (role: string) => request<ApplicantOverview>('/applicant/overview', { role }),
+
+  listMyClarifications: (role: string) =>
+    request<ApplicantDeficiency[]>('/applicant/clarifications', { role }),
+
+  getFindingEvidence: (role: string, findingId: string) =>
+    request<ApplicantEvidence>(`/applicant/findings/${findingId}/evidence`, { role }),
+
   uploadPolicy: (role: string) => request<UploadPolicy>('/applications/upload-policy', { role }),
+
+  listApplicationCategories: (role: string) =>
+    request<
+      Array<{
+        code: string
+        name: string
+        description: string
+        requiredDocuments: Array<{
+          code: string
+          name: string
+          mandatory: boolean
+          allowedTypes?: string[]
+          allowed_types?: string[]
+        }>
+      }>
+    >('/applications/categories', { role }),
 
   createApplication: (
     role: string,
@@ -188,6 +287,10 @@ export const api = {
       institution_name: string
       program_name: string
       academic_year: string
+      /** The applicant UI saves a private draft and submits explicitly. */
+      save_as_draft?: boolean
+      /** Values for the category's configured information fields. */
+      info_values?: Record<string, unknown>
     },
   ) =>
     request<ApplicantApplication>('/applications', {
@@ -347,6 +450,7 @@ export const api = {
       { role },
     ),
 
+  /** Text may be empty when a replacement document alone answers the request; the server decides. */
   respondDeficiency: (role: string, deficiencyId: string, response: string) =>
     request<DeficiencyNotice>(`/deficiencies/${deficiencyId}/respond`, {
       method: 'POST',
@@ -354,6 +458,17 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ response }),
     }),
+
+  transitionFinding: (role: string, findingId: string, body: { status: string; reason?: string }) =>
+    request<unknown>(`/findings/${findingId}/transition`, {
+      method: 'POST',
+      role,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  getFindingHistory: (role: string, findingId: string) =>
+    request<FindingTransition[]>(`/findings/${findingId}/history`, { role }),
 
   resolveFinding: (role: string, findingId: string, body: { status: string; reason: string }) =>
     request<Finding>(`/findings/${findingId}/resolve`, {
@@ -601,6 +716,13 @@ export const api = {
     }),
 
   systemHealth: (role: string) => request<SystemHealth>('/admin/system-health', { role }),
+  listProcessingJobs: (role: string, params?: { kind?: string; outcome?: string }) => {
+    const q = new URLSearchParams()
+    if (params?.kind) q.set('kind', params.kind)
+    if (params?.outcome) q.set('outcome', params.outcome)
+    const qs = q.toString()
+    return request<ProcessingJobList>(`/admin/jobs${qs ? `?${qs}` : ''}`, { role })
+  },
 
   // ---- Rule import, drafts, usage (admin) ------------------------------------
   validateRuleImport: (role: string, jsonText: string) =>
@@ -699,8 +821,8 @@ export const api = {
     }),
 
   /** Stored file as a Blob (the endpoint needs auth headers, so an <iframe src> cannot be used). */
-  fetchDocumentFile: (role: string, documentId: string) =>
-    requestBlob(`/documents/${documentId}/file`, role),
+  fetchDocumentFile: (role: string, documentId: string, version?: number) =>
+    requestBlob(`/documents/${documentId}/file${version ? `?version=${version}` : ''}`, role),
 
   downloadScrutinyPdf: (role: string, applicationId: string) =>
     requestBlob(`/applications/${applicationId}/report.pdf`, role),
@@ -732,4 +854,107 @@ export const api = {
 
   deleteHandbookReference: (role: string, id: string) =>
     request<{ ok: boolean }>(`/admin/handbook-references/${id}`, { method: 'DELETE', role }),
+
+  // ---- Category configuration (administrator) ------------------------------------------
+  cfgListCategories: (role: string, p: { q?: string; status?: string; state?: string } = {}) => {
+    const q = new URLSearchParams()
+    if (p.q) q.set('q', p.q)
+    if (p.status) q.set('status', p.status)
+    if (p.state) q.set('state', p.state)
+    const qs = q.toString()
+    return request<ConfigCategorySummary[]>(`/admin/config/categories${qs ? `?${qs}` : ''}`, { role })
+  },
+  cfgCreateCategory: (role: string, body: { code: string; name: string; description?: string }) =>
+    request<ConfigCategoryDetail>('/admin/config/categories', jsonBody('POST', role, body)),
+  cfgGetCategory: (role: string, id: string) =>
+    request<ConfigCategoryDetail>(`/admin/config/categories/${id}`, { role }),
+  cfgUpdateCategory: (
+    role: string,
+    id: string,
+    body: { name?: string; description?: string; is_active?: boolean },
+  ) => request<ConfigCategoryDetail>(`/admin/config/categories/${id}`, jsonBody('PATCH', role, body)),
+  cfgSetInfoFields: (role: string, id: string, fields: InfoFieldDef[]) =>
+    request<ConfigCategoryDetail>(`/admin/config/categories/${id}/info-fields`, jsonBody('PUT', role, { fields })),
+  cfgPublish: (role: string, id: string, note = '') =>
+    request<ConfigCategoryDetail>(`/admin/config/categories/${id}/publish`, jsonBody('POST', role, { note })),
+  cfgGetVersion: (role: string, id: string, version: number) =>
+    request<{ version: number; status: string; summary: string; publishedAt: string | null; snapshot: unknown }>(
+      `/admin/config/categories/${id}/versions/${version}`,
+      { role },
+    ),
+  cfgCreateRequirement: (role: string, categoryId: string, body: Record<string, unknown>) =>
+    request<ConfigRequirement>(`/admin/config/categories/${categoryId}/requirements`, jsonBody('POST', role, body)),
+  cfgUpdateRequirement: (role: string, id: string, body: Record<string, unknown>) =>
+    request<ConfigRequirement & { impact: Record<string, number> }>(
+      `/admin/config/requirements/${id}`,
+      jsonBody('PATCH', role, body),
+    ),
+  cfgReorderRequirements: (role: string, categoryId: string, ids: string[]) =>
+    request<ConfigCategoryDetail>(
+      `/admin/config/categories/${categoryId}/requirements/order`,
+      jsonBody('PUT', role, { ids }),
+    ),
+  cfgRequirementRules: (role: string, requirementId: string) =>
+    request<RequirementRulesResponse>(`/admin/config/requirements/${requirementId}/rules`, { role }),
+  cfgCreateRule: (role: string, requirementId: string, body: Record<string, unknown>) =>
+    request<ConfigRule>(`/admin/config/requirements/${requirementId}/rules`, jsonBody('POST', role, body)),
+  cfgGetRule: (role: string, ruleId: string) => request<ConfigRule>(`/admin/config/rules/${ruleId}`, { role }),
+  cfgSaveRuleDraft: (role: string, ruleId: string, body: Record<string, unknown>) =>
+    request<ConfigRule>(`/admin/config/rules/${ruleId}/draft`, jsonBody('PUT', role, body)),
+  cfgDiscardRuleDraft: (role: string, ruleId: string) =>
+    request<{ ok: boolean }>(`/admin/config/rules/${ruleId}/draft`, { method: 'DELETE', role }),
+  cfgEditRule: (role: string, ruleId: string) =>
+    request<ConfigRule>(`/admin/config/rules/${ruleId}/edit`, { method: 'POST', role }),
+  cfgActivateRule: (role: string, ruleId: string, version: number, confirmInterpretation: boolean) =>
+    request<ConfigRule>(
+      `/admin/config/rules/${ruleId}/versions/${version}/activate`,
+      jsonBody('POST', role, { confirm_interpretation: confirmInterpretation }),
+    ),
+  cfgDeactivateRule: (role: string, ruleId: string) =>
+    request<ConfigRule>(`/admin/config/rules/${ruleId}/deactivate`, { method: 'POST', role }),
+  cfgDuplicateRule: (role: string, ruleId: string) =>
+    request<ConfigRule>(`/admin/config/rules/${ruleId}/duplicate`, { method: 'POST', role }),
+  cfgValidateDefinition: (
+    role: string,
+    body: { definition: unknown; source_reference?: string; requirement_id?: string },
+  ) => request<RuleValidationReport>('/admin/config/rule-definitions/validate', jsonBody('POST', role, body)),
+  cfgSuggestDefinition: (role: string, text: string) =>
+    request<RuleSuggestion>('/admin/config/rule-definitions/suggest', jsonBody('POST', role, { text })),
+  cfgDefinitionSchema: (role: string) =>
+    request<RuleDefinitionSchema>('/admin/config/rule-definitions/schema', { role }),
+  cfgDryRun: (
+    role: string,
+    requirementId: string,
+    body: { definition: unknown; source_reference?: string; sample: Record<string, unknown> },
+  ) =>
+    request<RuleDryRunResult>(`/admin/config/requirements/${requirementId}/rules/dry-run`, jsonBody('POST', role, body)),
+  cfgRulesOverview: (
+    role: string,
+    p: { categoryId?: string; requirementId?: string; status?: string; ruleType?: string; configVersion?: number } = {},
+  ) => {
+    const q = new URLSearchParams()
+    if (p.categoryId) q.set('category_id', p.categoryId)
+    if (p.requirementId) q.set('requirement_id', p.requirementId)
+    if (p.status) q.set('status', p.status)
+    if (p.ruleType) q.set('rule_type', p.ruleType)
+    if (p.configVersion != null) q.set('config_version', String(p.configVersion))
+    const qs = q.toString()
+    return request<ConfigRule[]>(`/admin/config/rules/overview${qs ? `?${qs}` : ''}`, { role })
+  },
+
+  // ---- Applicant: configuration-driven application ---------------------------------------
+  listCategoryOptions: (role: string) => request<ApplicantCategoryOption[]>('/applications/categories', { role }),
+  getCategoryConfig: (role: string, code: string) =>
+    request<PublicCategoryConfig>(`/applications/categories/${encodeURIComponent(code)}/config`, { role }),
+  listRuleChecks: (role: string, applicationId: string) =>
+    request<RuleCheckRow[]>(`/applications/${applicationId}/rule-checks`, { role }),
+}
+
+function jsonBody(method: string, role: string, body: unknown): RequestInit & { role: string } {
+  return {
+    method,
+    role,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }
 }

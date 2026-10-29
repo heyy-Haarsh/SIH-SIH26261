@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { SkeletonFeed } from '@/components/ui/Skeleton'
 import { Input, Label, Select } from '@/components/ui/Input'
 import { errorText } from '@/components/scrutiny/scrutinyUi'
 import { api, type AuditSearchParams } from '@/services/api'
@@ -206,21 +207,36 @@ export function AuditPage() {
       }
     >
       {error && (
-        <p role="alert" className="mb-3 text-sm text-status-failed">
+        <div
+          role="alert"
+          className="mb-5 rounded-xl px-4 py-3 text-sm"
+          style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B' }}
+        >
           {error}
-        </p>
+        </div>
       )}
       {note && (
-        <div role="status" className="mb-4 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2 text-xs">
+        <div
+          role="status"
+          className="mb-5 rounded-xl px-4 py-3 text-sm"
+          style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', color: '#166534' }}
+        >
           {note}
         </div>
       )}
 
-      <Card className="mb-4">
-        <CardHeader
-          title="Search"
-          description={`${total} matching event(s)${facets ? ` of ${facets.total} recorded` : ''}`}
-        />
+      <div
+        className="rounded-xl mb-5 px-6 py-5"
+        style={{ background: '#FFFFFF', border: '1px solid #F0F0F0' }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-sm font-semibold" style={{ color: '#111111' }}>Search</div>
+            <div className="text-[11px] mt-0.5" style={{ color: '#888888' }}>
+              {total} matching event{total !== 1 ? 's' : ''}{facets ? ` of ${facets.total} recorded` : ''}
+            </div>
+          </div>
+        </div>
         <form
           className="grid gap-3 md:grid-cols-4"
           onSubmit={(e) => {
@@ -294,35 +310,51 @@ export function AuditPage() {
             </Button>
           </div>
         </form>
-      </Card>
+      </div>
 
-      <Card padding={false}>
-        <ul className="divide-y divide-border">
-          {items.map((ev) => {
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ background: '#FFFFFF', border: '1px solid #F0F0F0' }}
+      >
+        {loading && items.length === 0 ? (
+          <SkeletonFeed count={6} />
+        ) : (
+          <ul>
+            {items.map((ev) => {
             const open = openId === ev.id
             return (
               <li key={ev.id}>
                 <button
                   type="button"
-                  className="flex w-full flex-col gap-0.5 px-4 py-3 text-left hover:bg-surface"
+                  className="flex w-full flex-col gap-0.5 px-6 py-4 text-left transition-colors hover:bg-[#FAFAFA]"
                   aria-expanded={open}
+                  style={{ borderBottom: '1px solid #F0F0F0' }}
                   onClick={() => void toggleRow(ev.id)}
                 >
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-ink">{ev.label ?? ev.action}</span>
-                    {ev.category && <Badge tone="neutral">{ev.category}</Badge>}
-                    <code className="text-[11px] text-ink-muted">{ev.action}</code>
+                    <span className="text-sm font-medium" style={{ color: '#111111' }}>{ev.label ?? ev.action}</span>
+                    {ev.category && (
+                      <span
+                        className="rounded-md border px-2 py-0.5 text-[11px] font-medium"
+                        style={{ border: '1px solid #E0E0E0', color: '#555555' }}
+                      >
+                        {ev.category}
+                      </span>
+                    )}
+                    <code className="text-[11px]" style={{ color: '#888888' }}>{ev.action}</code>
                   </span>
-                  <span className="text-xs text-ink-secondary">{ev.detail}</span>
-                  <span className="text-[11px] text-ink-muted">
-                    {ev.actor}
-                    {ev.actorRole ? ` (${ev.actorRole})` : ''} · {formatDateTime(ev.timestamp)}
+                  <span className="text-[12px]" style={{ color: '#555555' }}>{ev.detail}</span>
+                  <span className="text-[11px]" style={{ color: '#AAAAAA' }}>
+                    {ev.actor}{ev.actorRole ? ` (${ev.actorRole})` : ''} · {formatDateTime(ev.timestamp)}
                     {ev.applicationNumber ? ` · ${ev.applicationNumber}` : ''}
                     {ev.entityType ? ` · ${ev.entityType.replace(/_/g, ' ')}` : ''}
                   </span>
                 </button>
                 {open && (
-                  <div className="space-y-3 border-t border-border bg-surface px-4 py-3 text-xs">
+                  <div
+                    className="space-y-3 px-6 py-4 text-xs"
+                    style={{ borderBottom: '1px solid #F0F0F0', background: '#FAFAFA' }}
+                  >
                     {!detail || detail.id !== ev.id ? (
                       <p className="text-ink-muted">Loading details…</p>
                     ) : (
@@ -357,10 +389,19 @@ export function AuditPage() {
             )
           })}
           {items.length === 0 && !error && !loading && (
-            <li className="px-4 py-8 text-center text-sm text-ink-muted">No events match these filters.</li>
+            <li
+              className="px-6 py-10 text-center text-sm"
+              style={{ color: '#AAAAAA' }}
+            >
+              No events match these filters.
+            </li>
           )}
         </ul>
-        <div className="flex items-center justify-between border-t border-border px-4 py-3">
+      )}
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderTop: '1px solid #F0F0F0' }}
+        >
           <Button
             size="sm"
             variant="outline"
@@ -369,7 +410,7 @@ export function AuditPage() {
           >
             Previous
           </Button>
-          <span className="text-xs text-ink-muted">
+          <span className="text-xs" style={{ color: '#888888' }}>
             {from}–{to} of {total}
           </span>
           <Button
@@ -381,7 +422,7 @@ export function AuditPage() {
             Next
           </Button>
         </div>
-      </Card>
+      </div>
     </AppShell>
   )
 }

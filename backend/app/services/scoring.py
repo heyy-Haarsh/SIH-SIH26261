@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.application import Application
 from app.models.document import Document
 from app.models.enums import (
+    ACTIVE_FINDING_VALUES,
     ApplicationStatus,
     DeficiencyStatus,
     FindingSeverity,
@@ -146,7 +147,7 @@ def compute_scrutiny_score(db: Session, application: Application) -> ScoreResult
     seen_titles: set[str] = set()
     for f in findings:
         status_val = f.status.value if hasattr(f.status, "value") else str(f.status)
-        if status_val != FindingStatus.OPEN.value:
+        if status_val not in ACTIVE_FINDING_VALUES:
             continue
         key = f"{f.rule_code}:{f.title}"
         if key in seen_titles:
@@ -236,7 +237,9 @@ def compute_scrutiny_score(db: Session, application: Application) -> ScoreResult
         )
 
     # Missing mandatory documents
-    reqs = application.category.required_documents if application.category else DEFAULT_DOCS
+    from app.services import category_config_service
+
+    reqs = category_config_service.effective_requirements(application)
     uploaded = {d.requirement_code for d in application.documents}
     for req in reqs:
         if not req.get("mandatory"):
@@ -330,7 +333,9 @@ def build_scrutiny_summary(db: Session, application: Application, score: ScoreRe
         .count()
     )
     docs = db.query(Document).filter(Document.application_id == application.id).count()
-    reqs = application.category.required_documents if application.category else DEFAULT_DOCS
+    from app.services import category_config_service
+
+    reqs = category_config_service.effective_requirements(application)
     mandatory = [r for r in reqs if r.get("mandatory")]
     uploaded = {d.requirement_code for d in application.documents}
     missing = [r.get("code") for r in mandatory if r.get("code") not in uploaded]

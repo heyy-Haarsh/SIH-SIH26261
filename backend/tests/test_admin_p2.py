@@ -495,13 +495,13 @@ def test_audit_search_filters_facets_detail_and_application_number(client):
     code = f"SYN-AUD-{_uid()}"
     client.post(f"{A}/rules", headers=ADMIN, json={"code": code, "name": "Audit probe rule",
                                                     "definition": {"logic": "missing_mandatory"}})
-    by_cat = client.get(f"{A}/audit", headers=ADMIN, params={"category": "regional_officer", "actor_role": "regional_officer", "q": code}).json()
-    assert by_cat["total"] >= 1 and all(i["category"] == "regional_officer" and i["actorRole"] == "regional_officer" for i in by_cat["items"])
-    nothing = client.get(f"{A}/audit", headers=ADMIN, params={"actor_role": "applicant", "category": "regional_officer"}).json()
+    by_cat = client.get(f"{A}/audit", headers=ADMIN, params={"category": "admin", "actor_role": "regional_officer", "q": code}).json()
+    assert by_cat["total"] >= 1 and all(i["category"] == "admin" and i["actorRole"] == "regional_officer" for i in by_cat["items"])
+    nothing = client.get(f"{A}/audit", headers=ADMIN, params={"actor_role": "applicant", "category": "admin"}).json()
     assert nothing["total"] == 0
 
     facets = client.get(f"{A}/audit/facets", headers=ADMIN).json()
-    assert "regional_officer" in [c["value"] for c in facets["categories"]]
+    assert "admin" in [c["value"] for c in facets["categories"]]
     assert facets["total"] >= by_cat["total"]
 
     event = by_cat["items"][0]
@@ -541,7 +541,7 @@ def test_audit_csv_export_is_filtered_audited_and_formula_safe(client):
 
     assert _csv_cell("=HYPERLINK(\"x\")") == "'=HYPERLINK(\"x\")"
     assert _csv_cell("+1") == "'+1" and _csv_cell("@cmd") == "'@cmd" and _csv_cell("normal") == "normal"
-    res = client.get(f"{A}/audit/export.csv", headers=ADMIN, params={"category": "regional_officer"})
+    res = client.get(f"{A}/audit/export.csv", headers=ADMIN, params={"category": "admin"})
     assert res.status_code == 200
     assert res.headers["content-type"].startswith("text/csv")
     assert "attachment" in res.headers["content-disposition"]

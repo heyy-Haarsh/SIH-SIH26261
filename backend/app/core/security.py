@@ -117,7 +117,12 @@ def can_access_application(user: User, application: Application) -> bool:
 
 
 def ensure_application_access(user: User, application: Application) -> None:
-    """Raise 404 (not 403) for other institutions' applications so ids cannot be probed."""
+    """Raise 404 (not 403) for other institutions' applications so ids cannot be probed.
+
+    An unsubmitted draft is private to the applicant: staff get 404 until it is submitted."""
+    status = getattr(application.status, "value", application.status)
+    if user.role != UserRole.APPLICANT and status == "draft":
+        raise NotFoundError("Application not found.")
     if not can_access_application(user, application):
         if user.role == UserRole.APPLICANT:
             raise NotFoundError("Application not found.")

@@ -1,10 +1,10 @@
-import { Bell, ChevronDown, Menu } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useRole } from '@/app/RoleContext'
 import { ROLE_HOME } from '@/lib/nav'
 import type { UserRole } from '@/types'
-import { Badge } from '@/components/ui/Badge'
 import { Select } from '@/components/ui/Input'
+import { NotificationBell } from './NotificationBell'
 
 const ROLE_LABELS: Record<UserRole, string> = {
   applicant: 'Institution / Applicant',
@@ -12,12 +12,19 @@ const ROLE_LABELS: Record<UserRole, string> = {
   regional_officer: 'Regional Officer',
 }
 
+const ROLE_SECTION: Record<UserRole, string> = {
+  applicant: 'SmartBuild',
+  officer: 'SmartBuild',
+  regional_officer: 'SmartBuild',
+}
+
 export function TopBar({
   title,
   breadcrumbs,
   onMenuClick,
 }: {
-  title: string
+  title?: string
+  description?: string
   breadcrumbs?: string[]
   onMenuClick?: () => void
 }) {
@@ -26,47 +33,67 @@ export function TopBar({
 
   function onRoleChange(next: UserRole) {
     setRole(next)
-    // Role-prefixed routes stay mounted; navigate home so the active workspace updates immediately.
     navigate(ROLE_HOME[next], { replace: true })
   }
 
+  const initials = user.name
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4 md:px-6">
+    <header
+      className="flex h-14 shrink-0 items-center justify-between gap-4 bg-[#F5F5F5] px-6"
+      style={{ borderBottom: '1px solid #F0F0F0' }}
+    >
+      {/* Left: mobile menu + breadcrumbs */}
       <div className="flex min-w-0 items-center gap-3">
         {onMenuClick && (
           <button
             type="button"
-            className="rounded-md p-1.5 text-ink-muted hover:bg-surface-muted lg:hidden"
+            className="rounded-lg p-1.5 text-[#888888] hover:bg-white lg:hidden"
             onClick={onMenuClick}
             aria-label="Open navigation"
           >
             <Menu size={18} />
           </button>
         )}
-        <div className="min-w-0">
-          {breadcrumbs && breadcrumbs.length > 0 && (
-            <div className="mb-0.5 flex items-center gap-1 text-[11px] text-ink-muted">
-              {breadcrumbs.map((crumb, i) => (
-                <span key={crumb} className="flex items-center gap-1">
-                  {i > 0 && <span>/</span>}
-                  <span>{crumb}</span>
+
+        {/* Breadcrumbs */}
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm">
+          <span className="font-medium text-[#888888]">{ROLE_SECTION[role]}</span>
+          <span className="text-[#CCCCCC] mx-1">/</span>
+          {breadcrumbs && breadcrumbs.length > 0
+            ? breadcrumbs.map((crumb, i) => (
+                <span key={`${crumb}-${i}`} className="flex items-center gap-1">
+                  {i > 0 && <span className="text-[#CCCCCC]">/</span>}
+                  <span
+                    className={
+                      i === breadcrumbs.length - 1
+                        ? 'font-semibold text-[#111111]'
+                        : 'text-[#888888]'
+                    }
+                  >
+                    {crumb}
+                  </span>
                 </span>
-              ))}
-            </div>
-          )}
-          <h1 className="truncate text-sm font-semibold text-ink md:text-base">{title}</h1>
-        </div>
+              ))
+            : title && (
+                <span className="font-semibold text-[#111111]">{title}</span>
+              )}
+        </nav>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3">
-        <div className="hidden items-center gap-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-2.5 py-1 sm:flex">
-          <Badge tone="warning">Demo</Badge>
-          <span className="text-[11px] text-amber-800">Role switcher — not secure auth</span>
-        </div>
-
-        <div className="w-[160px] md:w-[200px]">
+      {/* Right: demo role switcher, bell, avatar */}
+      <div className="flex items-center gap-3">
+        {/* Demo role switcher */}
+        <label className="flex items-center gap-2 text-[11px] text-[#888888]">
+          <span className="hidden sm:inline">Demo role</span>
           <Select
-            aria-label="Demo role switcher"
+            aria-label="Demo role switcher (not secure authentication)"
+            className="!h-8 w-[160px] !text-xs !border-[#E0E0E0] !bg-white !rounded-lg"
             value={role}
             onChange={(e) => onRoleChange(e.target.value as UserRole)}
           >
@@ -74,30 +101,24 @@ export function TopBar({
             <option value="applicant">Applicant</option>
             <option value="regional_officer">Regional Officer</option>
           </Select>
-        </div>
+        </label>
 
-        <button
-          type="button"
-          className="relative rounded-md p-2 text-ink-muted hover:bg-surface-muted"
-          aria-label="Notifications"
-        >
-          <Bell size={18} />
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-status-failed" />
-        </button>
+        {/* Notification bell */}
+        <NotificationBell />
 
-        <div className="hidden items-center gap-2 border-l border-border pl-3 md:flex">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand">
-            {user.name
-              .split(' ')
-              .map((n) => n[0])
-              .slice(0, 2)
-              .join('')}
+        {/* User avatar */}
+        <div className="flex items-center gap-2.5">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
+            style={{ background: '#2D2D2D' }}
+            title={user.name}
+          >
+            {initials}
           </div>
-          <div className="min-w-0">
-            <div className="truncate text-xs font-medium text-ink">{user.name}</div>
-            <div className="truncate text-[10px] text-ink-muted">{ROLE_LABELS[role]}</div>
+          <div className="hidden min-w-0 md:block">
+            <div className="truncate text-[13px] font-medium text-[#111111]">{user.name}</div>
+            <div className="truncate text-[11px] text-[#888888]">{ROLE_LABELS[role]}</div>
           </div>
-          <ChevronDown size={14} className="text-ink-muted" />
         </div>
       </div>
     </header>

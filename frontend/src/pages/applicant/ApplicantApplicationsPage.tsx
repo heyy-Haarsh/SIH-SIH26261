@@ -50,7 +50,7 @@ export function ApplicantApplicationsPage() {
           }
         />
         {error && (
-          <div className="mb-4 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <div className="mb-4 rounded-[var(--radius-md)] border border-[#e3d8bd] bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
             {error}
           </div>
         )}
@@ -63,7 +63,7 @@ export function ApplicantApplicationsPage() {
             , then upload your documents.
           </p>
         ) : (
-          <ApplicantApplicationTable rows={apps} />
+          <ApplicantApplicationTable rows={apps} loading={loading} />
         )}
       </Card>
     </AppShell>

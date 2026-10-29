@@ -12,11 +12,19 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand text-white hover:bg-brand-hover shadow-sm',
-  secondary: 'bg-brand-soft text-brand hover:bg-[#dce6f1]',
-  ghost: 'bg-transparent text-ink-secondary hover:bg-surface-muted',
-  danger: 'bg-status-failed text-white hover:bg-red-700',
-  outline: 'bg-white border border-border text-ink hover:bg-surface-muted',
+  primary: 'bg-[#E8622A] text-white hover:bg-[#D4541F]',
+  secondary: 'bg-[#F5F5F5] text-[#333333] hover:bg-[#EEEEEE]',
+  ghost: 'bg-transparent text-[#555555] hover:bg-[#F5F5F5]',
+  danger: 'bg-[#B91C1C] text-white hover:bg-[#991B1B]',
+  outline: 'bg-white border text-[#333333] hover:bg-[#F5F5F5]',
+}
+
+const outlineStyle: Record<Variant, string> = {
+  primary: '',
+  secondary: '',
+  ghost: '',
+  danger: '',
+  outline: 'border-[#E0E0E0]',
 }
 
 const sizes: Record<Size, string> = {
@@ -37,8 +45,9 @@ export function Button({
   return (
     <button
       className={clsx(
-        'inline-flex items-center justify-center rounded-[var(--radius-md)] font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none',
         variants[variant],
+        outlineStyle[variant],
         sizes[size],
         className,
       )}

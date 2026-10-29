@@ -39,21 +39,25 @@ export function DeficienciesPage() {
   }, [role])
 
   return (
-    <AppShell title="Deficiency Notices" breadcrumbs={['Applicant', 'Deficiencies']}>
+    <AppShell
+      title="Clarifications"
+      description="Respond to officer requests, then open the application to upload replacements and resubmit."
+      breadcrumbs={['Applicant', 'Clarifications']}
+    >
       <DemoBanner>
         Open clarification requests from scrutiny officers. Respond here, upload corrected documents,
         then resubmit from the application page. Prior versions and audit history are preserved.
       </DemoBanner>
 
       <Card>
-        <CardHeader title="Your deficiency list" description={`${items.length} notice(s)`} />
+        <CardHeader title="Open clarification requests" description={`${items.length} notice(s)`} />
         {error && (
-          <div className="mb-4 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <div className="mb-4 rounded-[var(--radius-md)] border border-[#e3d8bd] bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
             {error}
           </div>
         )}
         {msg && (
-          <div className="mb-4 rounded-[var(--radius-md)] border border-emerald-200 bg-status-pass-bg px-3 py-2 text-xs text-status-pass">
+          <div className="mb-4 rounded-[var(--radius-md)] border border-[#cfdad2] bg-status-pass-bg px-3 py-2 text-xs text-status-pass">
             {msg}
           </div>
         )}
@@ -85,8 +89,7 @@ export function DeficienciesPage() {
                   </Link>
                 )}
               </div>
-              <p className="mb-2 text-xs text-ink-secondary">{d.description}</p>
-              {d.applicantResponse && (
+              <p className="mb-2 text-xs text-ink-secondary">{d.description}</p>              {d.applicantResponse && (
                 <p className="mb-2 text-[11px] text-ink-muted">Your response: {d.applicantResponse}</p>
               )}
               {d.status === 'open' && (

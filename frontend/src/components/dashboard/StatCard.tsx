@@ -1,29 +1,46 @@
 import type { LucideIcon } from 'lucide-react'
-import { Card } from '@/components/ui/Card'
 
+/**
+ * Lintel-style metric cell: no card border, just label → big number → trend text.
+ * Used inside a flexbox row separated by thin vertical dividers.
+ */
 export function StatCard({
   label,
   value,
   hint,
-  icon: Icon,
+  trend,
+  trendUp,
+  icon: _Icon,
 }: {
   label: string
   value: string | number
   hint?: string
-  icon: LucideIcon
+  trend?: string
+  trendUp?: boolean
+  icon?: LucideIcon
 }) {
   return (
-    <Card className="!p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-medium text-ink-muted">{label}</div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight text-ink">{value}</div>
-          {hint && <div className="mt-1 text-[11px] text-ink-muted">{hint}</div>}
-        </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] bg-brand-soft text-brand">
-          <Icon size={18} />
-        </div>
+    <div className="flex-1 px-6 py-5 metric-divider">
+      <div
+        className="text-[11px] font-medium uppercase tracking-wider mb-1"
+        style={{ color: '#999999' }}
+      >
+        {label}
       </div>
-    </Card>
+      <div
+        className="text-[28px] font-bold leading-none tracking-tight"
+        style={{ color: '#111111' }}
+      >
+        {value}
+      </div>
+      {(hint || trend) && (
+        <div
+          className="mt-1.5 text-[11px]"
+          style={{ color: trendUp ? '#2E7D52' : trend ? '#888888' : '#888888' }}
+        >
+          {trend ?? hint}
+        </div>
+      )}
+    </div>
   )
 }

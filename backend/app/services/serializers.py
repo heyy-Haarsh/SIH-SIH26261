@@ -332,7 +332,9 @@ def current_extracted_fields(doc: Document) -> list[ExtractedFieldOut]:
 
 
 def application_detail(db: Session, app: Application) -> ApplicationDetailOut:
-    req_defs = app.category.required_documents if app.category else DEFAULT_DOCS
+    from app.services import category_config_service
+
+    req_defs = category_config_service.effective_requirements(app)
     uploaded = {d.requirement_code for d in app.documents}
     requirements = [
         DocumentRequirementOut(

@@ -18,6 +18,12 @@ from tests.conftest import auth_headers
 APPLICANT = auth_headers("applicant")
 OFFICER = auth_headers("officer")
 
+APPLICANT_FINDING_KEYS = {
+    "id", "reference", "kind", "title", "explanation", "requestedCorrection", "document",
+    "pageReference", "snippet", "status", "statusLabel", "nextAction", "clarificationId",
+    "officerNote", "updatedAt", "outdatedVersion",
+}
+
 FORBIDDEN_KEYS = {
     "extractedFields",
     "priorityScore",
@@ -25,7 +31,6 @@ FORBIDDEN_KEYS = {
     "scrutinySummary",
     "forensicsIndicators",
     "forensicsLimitations",
-    "findings",
     "discrepancies",
     "documentVerificationRuns",
     "verifications",
@@ -113,6 +118,9 @@ def test_applicant_view_has_no_internal_scrutiny_data(client):
 
     leaked = FORBIDDEN_KEYS & set(_walk_keys(view))
     assert not leaked, f"applicant view leaks internal keys: {leaked}"
+    # `findings` is the applicant-safe list; it may only use this allow-list of keys.
+    for item in view["findings"]:
+        assert set(item) <= APPLICANT_FINDING_KEYS, set(item) - APPLICANT_FINDING_KEYS
     text = json.dumps(view)
     assert "SYN-RULE" not in text
     assert "SIM-" not in text

@@ -16,7 +16,7 @@ export function HandbookBadge({ reference }: { reference?: HandbookReference | n
   }
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-status-pass-bg px-2 py-0.5 text-[11px] font-medium text-status-pass"
+      className="inline-flex items-center gap-1 rounded-md border border-[#cfdad2] bg-status-pass-bg px-2 py-0.5 text-[11px] font-medium text-status-pass"
       title={reference.title ?? undefined}
     >
       <BookOpen size={12} />

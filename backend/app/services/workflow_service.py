@@ -6,24 +6,28 @@ clarification_required ↔ resubmitted → recommended | rejected.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.models.application import Application
 from app.models.base import utcnow
+from app.models.finding_transition import DeficiencyFinding
 from app.models.enums import (
+    ACTIVE_FINDING_VALUES,
     ApplicationStatus,
     DeficiencyStatus,
     FindingStatus,
     ReviewDecisionType,
     UserRole,
 )
-from app.models.review import DeficiencyNotice, ReviewDecision
+from app.models.document import Document, DocumentVersion
+from app.models.review import DeficiencyNotice, DeficiencyResponse, ReviewDecision
 from app.models.user import User
 from app.models.validation import Finding
 from app.services.audit_service import record_audit
+from app.services import clarification_service, finding_lifecycle, notification_service
 from app.services import scoring as scoring_service
 from app.services.serializers import application_detail
 
@@ -191,6 +195,14 @@ def mark_under_scrutiny(db: Session, app: Application, actor: User | None = None
         app.status = ApplicationStatus.UNDER_SCRUTINY
         app.last_transition_at = utcnow()
         app.last_transition_note = "Automatic: processing completed — under scrutiny"
+        notification_service.notify_applicants(
+            db,
+            app,
+            kind="status_changed",
+            title=f"{app.application_number} is now under review",
+            body="Automatic checks are finished and a scrutiny officer can review your application. "
+            "No action is needed unless they contact you.",
+        )
         if actor:
             record_audit(
                 db,
@@ -226,6 +238,13 @@ def start_scrutiny(db: Session, user: User, application_id: str) -> dict:
             note="Officer claimed application for scrutiny",
             action="workflow.start_scrutiny",
         )
+        notification_service.notify_applicants(
+            db,
+            app,
+            kind="status_changed",
+            title=f"{app.application_number} is now under review",
+            body="A scrutiny officer has started reviewing your application. No action is needed unless they contact you.",
+        )
     elif app.status == ApplicationStatus.UNDER_SCRUTINY:
         record_audit(
             db,
@@ -252,6 +271,8 @@ def request_clarification(
     title: str,
     description: str,
     finding_ids: list[str] | None = None,
+    requires_replacement: bool = False,
+    due_date: date | None = None,
 ) -> dict:
     if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
         raise ForbiddenError("Only officers may request clarification.")
@@ -271,16 +292,42 @@ def request_clarification(
         action="workflow.clarification_requested",
     )
 
+    # Link EVERY finding this request covers (not just the first). Ids that do not belong to this
+    # application are rejected rather than silently ignored.
+    linked: list[Finding] = []
+    for fid in dict.fromkeys(finding_ids or []):
+        finding = db.query(Finding).filter(Finding.id == fid).first()
+        if finding is None or finding.application_id != app.id:
+            raise UnprocessableError(
+                "A selected finding does not belong to this application.",
+                code="invalid_finding",
+            )
+        linked.append(finding)
+
     notice = DeficiencyNotice(
         application_id=app.id,
         issued_by_id=user.id,
-        finding_id=(finding_ids[0] if finding_ids else None),
+        finding_id=(linked[0].id if linked else None),
         title=title,
         description=description,
         status=DeficiencyStatus.OPEN,
+        requires_replacement=bool(requires_replacement),
+        due_date=due_date,
     )
     db.add(notice)
     db.flush()
+    for finding in linked:
+        db.add(DeficiencyFinding(deficiency_id=notice.id, finding_id=finding.id))
+        current = finding.status.value if hasattr(finding.status, "value") else str(finding.status)
+        if current in ACTIVE_FINDING_VALUES and current != FindingStatus.CLARIFICATION_REQUESTED.value:
+            finding_lifecycle.apply_transition(
+                db,
+                finding,
+                FindingStatus.CLARIFICATION_REQUESTED,
+                actor=user,
+                system=True,
+                reason=f"Clarification requested: {title}",
+            )
 
     db.add(
         ReviewDecision(
@@ -292,6 +339,13 @@ def request_clarification(
         )
     )
     scoring_service.apply_score_to_application(db, app)
+    notification_service.notify_applicants(
+        db,
+        app,
+        kind="clarification_requested",
+        title=f"Clarification requested on {app.application_number}",
+        body=title,
+    )
     db.commit()
     return application_detail(db, _get_app(db, application_id))
 
@@ -301,13 +355,11 @@ def respond_deficiency(
     user: User,
     deficiency_id: str,
     *,
-    response: str,
+    response: str = "",
 ) -> DeficiencyNotice:
     if user.role != UserRole.APPLICANT:
         raise ForbiddenError("Only applicants may respond to deficiencies.")
     response = (response or "").strip()
-    if len(response) < 5:
-        raise UnprocessableError("Response must be at least 5 characters.")
 
     notice = db.query(DeficiencyNotice).filter(DeficiencyNotice.id == deficiency_id).first()
     if not notice:
@@ -316,21 +368,87 @@ def respond_deficiency(
     if user.institution_id != app.institution_id:
         raise NotFoundError("Deficiency notice not found")
     if notice.status != DeficiencyStatus.OPEN:
-        raise UnprocessableError("Deficiency is not open.")
+        raise UnprocessableError("Deficiency is not open.", code="not_open")
 
-    notice.status = DeficiencyStatus.RESPONDED
-    notice.applicant_response = response
-    notice.responded_at = utcnow()
+    # Text-only cannot satisfy a mandatory replacement; an explanation is not forced to carry a file.
+    problem = clarification_service.missing_for_response(db, notice, response)
+    if problem:
+        code = (
+            "replacement_required"
+            if notice.requires_replacement
+            and not clarification_service.replacements_since_request(db, notice)
+            else "response_required"
+        )
+        raise UnprocessableError(problem, code=code)
+    replacements = clarification_service.replacements_since_request(db, notice)
+    mode = clarification_service.response_mode(response, replacements) or "text"
+
+    # Claim the request with one conditional UPDATE so a double click cannot answer it twice.
+    claimed = (
+        db.query(DeficiencyNotice)
+        .filter(DeficiencyNotice.id == notice.id, DeficiencyNotice.status == DeficiencyStatus.OPEN)
+        .update(
+            {
+                DeficiencyNotice.status: DeficiencyStatus.RESPONDED,
+                DeficiencyNotice.applicant_response: response
+                or "Replacement document uploaded (no written explanation).",
+                DeficiencyNotice.responded_at: utcnow(),
+            },
+            synchronize_session="fetch",
+        )
+    )
+    if not claimed:
+        db.rollback()
+        raise UnprocessableError("This request was already answered.", code="not_open")
+    db.add(
+        DeficiencyResponse(
+            deficiency_id=notice.id,
+            author_id=user.id,
+            mode=mode,
+            text=response,
+            documents=[
+                {"documentId": r.document_id, "name": r.name, "version": r.version}
+                for r in replacements
+            ],
+        )
+    )
+    db.refresh(notice)
+    # Findings that were waiting on this answer go back to the officer for review.
+    waiting = (
+        db.query(Finding)
+        .join(DeficiencyFinding, DeficiencyFinding.finding_id == Finding.id)
+        .filter(
+            DeficiencyFinding.deficiency_id == notice.id,
+            Finding.status == FindingStatus.CLARIFICATION_REQUESTED,
+        )
+        .all()
+    )
+    for finding in waiting:
+        finding_lifecycle.apply_transition(
+            db,
+            finding,
+            FindingStatus.UNDER_REVIEW,
+            actor=user,
+            system=True,
+            reason="Applicant responded to the clarification",
+        )
     record_audit(
         db,
         action="workflow.deficiency_responded",
         actor=user.name,
         actor_id=user.id,
         actor_role=user.role.value,
-        detail=f"deficiency={notice.id}; {response[:200]}",
+        detail=f"deficiency={notice.id}; mode={mode}; {response[:200]}",
         application_id=app.id,
     )
     scoring_service.apply_score_to_application(db, app)
+    notification_service.notify_assigned_officer(
+        db,
+        app,
+        kind="clarification_answered",
+        title=f"Applicant answered a clarification on {app.application_number}",
+        body=notice.title,
+    )
     db.commit()
     db.refresh(notice)
     return notice
@@ -413,6 +531,13 @@ def resubmit(db: Session, user: User, application_id: str, *, note: str = "") ->
         )
     )
 
+    notification_service.notify_assigned_officer(
+        db,
+        app,
+        kind="applicant_resubmitted",
+        title=f"{app.application_number} was resubmitted",
+        body=note or "The applicant responded to the clarification and resubmitted.",
+    )
     # Persist the resubmission itself first: if reprocessing fails the applicant's response,
     # the closed notices and the RESUBMITTED status must not be lost (officer can re-run).
     db.commit()
@@ -474,9 +599,7 @@ def resolve_finding(
     # Preserve original severity/outcome; only status + officer note change.
     # waived = still on record, not blocking this stage; resolved = fixed after check;
     # accepted = officer accepts the finding as recorded without requiring a re-upload.
-    finding.status = status
-    finding.resolution_reason = reason
-    finding.resolved_at = utcnow()
+    finding_lifecycle.apply_transition(db, finding, status, actor=user, reason=reason)
     record_audit(
         db,
         action="workflow.finding_resolved",
@@ -484,6 +607,44 @@ def resolve_finding(
         actor_id=user.id,
         actor_role=user.role.value,
         detail=f"finding={finding.id}; status={status.value}; reason={reason[:200]}",
+        application_id=finding.application_id,
+    )
+    scoring_service.apply_score_to_application(db, app)
+    db.commit()
+    db.refresh(finding)
+    return finding
+
+
+def transition_finding(
+    db: Session,
+    user: User,
+    finding_id: str,
+    *,
+    status: FindingStatus,
+    reason: str = "",
+) -> Finding:
+    """Officer-driven lifecycle move (under review, reopen, close, …) with history."""
+    if user.role not in (UserRole.OFFICER, UserRole.REGIONAL_OFFICER):
+        raise ForbiddenError("Only officers may change a finding's status.")
+    if status == FindingStatus.SUPERSEDED:
+        raise UnprocessableError(
+            "'superseded' is set by the system when evidence is re-processed.",
+            code="invalid_finding_transition",
+        )
+    finding = db.query(Finding).filter(Finding.id == finding_id).first()
+    if not finding:
+        raise NotFoundError("Finding not found")
+    app = _get_app(db, finding.application_id)
+    _ensure_officer_may_act(app, user, action="change finding status")
+    previous = finding.status.value if hasattr(finding.status, "value") else str(finding.status)
+    finding_lifecycle.apply_transition(db, finding, status, actor=user, reason=reason)
+    record_audit(
+        db,
+        action="workflow.finding_transition",
+        actor=user.name,
+        actor_id=user.id,
+        actor_role=user.role.value,
+        detail=f"finding={finding.id}; {previous} → {status.value}; reason={(reason or '')[:200]}",
         application_id=finding.application_id,
     )
     scoring_service.apply_score_to_application(db, app)
@@ -536,6 +697,13 @@ def record_recommendation(
     summary["finalDecisionAt"] = datetime.now(timezone.utc).isoformat()
     summary["finalDecisionBy"] = user.name
     app.scrutiny_summary = summary
+    notification_service.notify_applicants(
+        db,
+        app,
+        kind="decision_recorded",
+        title=f"An officer decision was recorded on {app.application_number}",
+        body="Open the application to read the officer's reasons.",
+    )
     db.commit()
     return application_detail(db, _get_app(db, application_id))
 

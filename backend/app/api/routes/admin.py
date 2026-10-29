@@ -29,6 +29,7 @@ from app.core.errors import UnprocessableError
 from app.services import (
     admin_service,
     integration_service,
+    job_service,
     rule_import_service,
     system_health_service,
 )
@@ -422,19 +423,6 @@ def get_audit_event(
     return admin_service.audit_event_detail(db, user, event_id)
 
 
-@router.get("/jobs")
-def list_jobs(_: User = Depends(require_roles(UserRole.REGIONAL_OFFICER))):
-    return {
-        "backend": "local_sync",
-        "celeryEnabled": False,
-        "message": (
-            "Async Celery workers are not required for local demo; "
-            "validation runs synchronously."
-        ),
-        "jobs": [],
-    }
-
-
 @router.get("/audit-chain/verify")
 def verify_audit_chain(
     from_seq: Optional[int] = Query(None),
@@ -623,6 +611,18 @@ def get_system_health(
     _: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
 ):
     return system_health_service.system_health(db)
+
+
+@router.get("/jobs")
+def list_processing_jobs(
+    kind: Optional[str] = Query(default=None, pattern="^(validation|extraction)$"),
+    outcome: Optional[str] = Query(default=None, pattern="^(ok|active|failed|needs_attention)$"),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.REGIONAL_OFFICER)),
+):
+    """Recent validation and extraction runs with status, timing and error, newest first."""
+    return job_service.list_jobs(db, kind=kind, outcome=outcome, limit=limit)
 
 
 # ---- delegation (Regional Officer) ------------------------------------------

@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, Date, ForeignKey, String, Text
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -47,7 +48,30 @@ class DeficiencyNotice(Base):
         enum_type(DeficiencyStatus), index=True, default=DeficiencyStatus.OPEN, nullable=False
     )
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # True when the officer needs a replacement file; a text-only answer cannot satisfy it.
+    requires_replacement: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false(), nullable=False
+    )
     applicant_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     responded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    issued_by: Mapped[Optional[User]] = relationship(foreign_keys=[issued_by_id])
+
+
+class DeficiencyResponse(Base):
+    """One applicant answer to a clarification. Kept as history; never edited or deleted."""
+
+    __tablename__ = "deficiency_responses"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    deficiency_id: Mapped[str] = mapped_column(
+        ForeignKey("deficiency_notices.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    author_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # text | document | both — derived from what was actually supplied, not from the client.
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    text: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # [{"documentId", "name", "version"}] — the replacement versions that backed this answer.
+    documents: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)

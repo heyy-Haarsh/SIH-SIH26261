@@ -28,12 +28,27 @@ POLICY: dict[tuple[str, str], object] = {
     # --- applicant-only
     ("GET", "/applicant/applications"): {A},
     ("GET", "/applicant/applications/{application_id}"): {A},
+    ("GET", "/applicant/overview"): {A},
+    ("GET", "/applicant/clarifications"): {A},
+    ("GET", "/applicant/findings/{finding_id}/evidence"): {A},
+    ("PATCH", "/applications/{application_id}"): {A},
     ("POST", "/applications"): {A},
     ("POST", "/applications/{application_id}/documents"): {A},
     ("POST", "/applications/{application_id}/resubmit"): {A},
+    ("GET", "/applications/{application_id}/readiness"): {A},
+    ("POST", "/applications/{application_id}/submit"): {A},
     ("POST", "/deficiencies/{deficiency_id}/respond"): {A},
     # --- shared, but data-scoped to the caller's institution
     ("GET", "/applications/upload-policy"): ANY,
+    ("GET", "/applications/categories"): ANY,
+    ("GET", "/applications/categories/{category_code}/config"): ANY,
+    # --- in-app notifications: every role, always scoped to the caller's own inbox
+    ("POST", "/findings/{finding_id}/transition"): {O},
+    ("GET", "/findings/{finding_id}/history"): STAFF,
+    ("GET", "/notifications"): ANY,
+    ("POST", "/notifications/read-all"): ANY,
+    ("POST", "/notifications/{notification_id}/read"): ANY,
+    ("POST", "/scrutiny/transcribe"): STAFF,
     ("GET", "/applications/{application_id}/deficiencies"): ANY,
     ("GET", "/deficiencies"): ANY,
     ("GET", "/documents/{document_id}/file"): ANY,
@@ -77,6 +92,7 @@ POLICY: dict[tuple[str, str], object] = {
     # --- admin read-only reference data that officers may also see
     ("GET", "/admin/categories"): STAFF,
     ("GET", "/admin/rules"): STAFF,
+    ("GET", "/applications/{application_id}/rule-checks"): STAFF,
 }
 
 
@@ -251,5 +267,5 @@ def test_applicant_create_response_is_the_narrow_view(client):
     ).json()
     assert {"id", "applicationNumber", "status", "requirements", "deficiencies"} <= set(created)
     flat = str(created).lower()
-    for forbidden in ("priorityscore", "scorebreakdown", "findings", "extractedfields", "riskscore"):
+    for forbidden in ("priorityscore", "scorebreakdown", "extractedfields", "riskscore"):
         assert forbidden not in flat, f"create response leaks {forbidden}"

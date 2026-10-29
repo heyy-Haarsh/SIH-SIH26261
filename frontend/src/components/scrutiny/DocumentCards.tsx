@@ -40,9 +40,9 @@ export function DocumentCards({ review, onOpen }: Props) {
             key={m.code}
             className="flex items-start gap-3 rounded-[var(--radius-md)] border border-dashed border-border bg-surface p-3"
           >
-            <FileX size={20} className="mt-0.5 shrink-0 text-amber-600" />
+            <FileX size={20} className="mt-0.5 shrink-0 text-status-warning" />
             <div>
-              <div className="text-sm font-medium text-amber-700">{m.name}</div>
+              <div className="text-sm font-medium text-status-warning">{m.name}</div>
               <div className="text-[11px] text-ink-muted">
                 {m.mandatory ? 'Mandatory' : 'Optional'} · not uploaded
               </div>
@@ -56,7 +56,7 @@ export function DocumentCards({ review, onOpen }: Props) {
 
 function Card({ doc, onOpen }: { doc: DocumentCard; onOpen: (id: string) => void }) {
   const check = doc.documentCheck
-  const bar = doc.highestSeverity ? SEVERITY_BAR[doc.highestSeverity] : 'border-l-emerald-400'
+  const bar = doc.highestSeverity ? SEVERITY_BAR[doc.highestSeverity] : 'border-l-[#8fa597]'
   return (
     <button
       type="button"

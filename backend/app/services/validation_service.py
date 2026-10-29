@@ -28,10 +28,12 @@ from app.services import findings_service, reconciliation_service
 from app.integrations.base import VerificationClaim, VerificationSource, VerificationStatus
 from app.integrations.registry import get_verification_adapter
 from app.models.application import Application
+from app.services import finding_lifecycle
 from app.models.base import utcnow
 from app.models.document import Document, ExtractedField
 from app.models.enums import FindingSeverity, FindingStatus, ValidationOutcome, ValidationRunStatus
 from app.models.extraction import ExtractionRun
+from app.models.finding_transition import DeficiencyFinding, FindingTransition
 from app.models.validation import Finding, FindingEvidence, ValidationRun
 from app.models.verification import VerificationRequest
 from app.rules.engine import ENGINE_VERSION, RULESET_VERSION, RuleEngine
@@ -77,8 +79,31 @@ def _persist_finding(
         rule_version=draft.rule_version,
         handbook_ref=draft.handbook_ref,
     )
+    if carried:
+        prior_finding = carried[1]
+        finding.resolution_reason = prior_finding.resolution_reason
+        finding.resolved_at = prior_finding.resolved_at
     db.add(finding)
     db.flush()
+    if carried:
+        # A clarification that was waiting on the previous row must follow the carried finding.
+        for link in (
+            db.query(DeficiencyFinding)
+            .filter(DeficiencyFinding.finding_id == carried[1].id)
+            .all()
+        ):
+            db.add(DeficiencyFinding(deficiency_id=link.deficiency_id, finding_id=finding.id))
+        db.add(
+            FindingTransition(
+                finding_id=finding.id,
+                application_id=application_id,
+                from_status=FindingStatus.OPEN.value,
+                to_status=finding.status.value,
+                actor_name="system",
+                actor_role="system",
+                reason="Carried over from the previous run: identical issue on the same document versions.",
+            )
+        )
     for ev in draft.evidence:
         db.add(
             FindingEvidence(
@@ -255,9 +280,9 @@ def run_validation(
                 classification=classification,
             )
         )
-    requirements = (
-        application.category.required_documents if application.category else DEFAULT_DOCS
-    )
+    from app.services import category_config_service as _ccs
+
+    requirements = _ccs.effective_requirements(application)
 
     # Best-effort workflow: processing (actor may be None for system-triggered)
     class _Actor:
@@ -328,10 +353,22 @@ def run_validation(
         today=date.today(),
     )
 
+    # Category-specific rules, from this application's pinned configuration only.
+    try:
+        from app.services import requirement_rule_runner
+
+        category_drafts = requirement_rule_runner.evaluate_application(db, application, run.id)
+    except Exception:  # noqa: BLE001 - a rule fault must not lose the whole validation run
+        logging.getLogger("praman.validation").exception(
+            "Category rules could not be evaluated for application %s", application.id
+        )
+        category_drafts = []
+
     drafts = (
         rules.evaluate(ctx, active_rule_map, disabled_rule_codes)
         + mismatch_drafts
         + forensics_drafts
+        + category_drafts
     )
     aggregation = aggregator.aggregate(drafts, module_results)
 
@@ -398,6 +435,15 @@ def run_validation(
 
     run.status = ValidationRunStatus.COMPLETED
     run.completed_at = datetime.now(timezone.utc)
+    # The evidence has just been re-processed: still-active findings from older runs are retired
+    # (recorded as superseded) instead of lingering or being silently dropped.
+    db.flush()
+    finding_lifecycle.supersede_previous_runs(
+        db,
+        application.id,
+        run.id,
+        note="Superseded by a newer validation run (documents re-processed).",
+    )
 
     if actor_proxy:
         workflow_service.mark_under_scrutiny(db, application, actor=actor_proxy)

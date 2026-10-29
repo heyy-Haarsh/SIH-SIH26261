@@ -56,10 +56,32 @@ class FindingSeverity(StrEnum):
 
 
 class FindingStatus(StrEnum):
+    """Officer-facing lifecycle of a finding.
+
+    Active (still needs a human decision): open, under_review, clarification_requested, reopened.
+    Closed: resolved, waived, accepted (officer decisions) and superseded (the evidence it was
+    about was replaced or re-processed — set by the system, never by hand).
+    """
+
     OPEN = "open"
+    UNDER_REVIEW = "under_review"
+    CLARIFICATION_REQUESTED = "clarification_requested"
     RESOLVED = "resolved"
     WAIVED = "waived"
     ACCEPTED = "accepted"
+    SUPERSEDED = "superseded"
+    REOPENED = "reopened"
+
+
+ACTIVE_FINDING_STATUSES = frozenset(
+    {
+        FindingStatus.OPEN,
+        FindingStatus.UNDER_REVIEW,
+        FindingStatus.CLARIFICATION_REQUESTED,
+        FindingStatus.REOPENED,
+    }
+)
+ACTIVE_FINDING_VALUES = frozenset(s.value for s in ACTIVE_FINDING_STATUSES)
 
 
 class ValidationOutcome(StrEnum):

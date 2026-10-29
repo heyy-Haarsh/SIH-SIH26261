@@ -36,6 +36,7 @@ export function DocumentReportPanel({ role, applicationId, documentId, onClose, 
     `${applicationId}:${documentId}`,
   )
   const [showFields, setShowFields] = useState(false)
+  const [focusFieldId, setFocusFieldId] = useState<string | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -84,12 +85,25 @@ export function DocumentReportPanel({ role, applicationId, documentId, onClose, 
               <div className="space-y-4">
                 <section>
                   <h3 className="mb-2 text-sm font-semibold text-ink">Document preview</h3>
+                  <p className="mb-2 text-[11px] text-ink-muted">
+                    Select a field below to jump to its page. A blue box appears only when extraction
+                    stored a bounding region — coordinates are never invented.
+                  </p>
                   <DocumentPreview
                     role={role}
                     documentId={doc.id}
                     mimeType={doc.mimeType}
                     fileName={doc.fileName}
                     version={doc.version}
+                    highlightPage={
+                      data.extractedFields.find((f) => f.id === focusFieldId)?.pageNumber ?? null
+                    }
+                    highlightBBox={
+                      data.extractedFields.find((f) => f.id === focusFieldId)?.bbox ?? null
+                    }
+                    highlightLabel={
+                      data.extractedFields.find((f) => f.id === focusFieldId)?.fieldName ?? null
+                    }
                   />
                 </section>
 
@@ -146,12 +160,23 @@ export function DocumentReportPanel({ role, applicationId, documentId, onClose, 
                             </tr>
                           )}
                           {data.extractedFields.map((f) => (
-                            <tr key={f.id} className="border-b border-border">
+                            <tr
+                              key={f.id}
+                              className={`cursor-pointer border-b border-border hover:bg-surface-muted ${
+                                focusFieldId === f.id ? 'bg-brand-soft' : ''
+                              }`}
+                              onClick={() => setFocusFieldId(f.id)}
+                            >
                               <td className="py-1 pr-2 font-medium text-ink">
                                 {f.fieldName.replace(/_/g, ' ')}
                                 {f.isConflict && (
                                   <Badge tone="warning" className="ml-1">
                                     conflict
+                                  </Badge>
+                                )}
+                                {f.bbox && (
+                                  <Badge tone="info" className="ml-1">
+                                    region
                                   </Badge>
                                 )}
                               </td>
@@ -290,7 +315,7 @@ function CheckRow({
   return (
     <li
       className={`rounded border border-border border-l-4 px-3 py-2 text-xs ${
-        passed ? 'border-l-emerald-400' : SEVERITY_BAR[check.severity]
+        passed ? 'border-l-[#8fa597]' : SEVERITY_BAR[check.severity]
       }`}
     >
       <div className="flex flex-wrap items-center gap-1.5">

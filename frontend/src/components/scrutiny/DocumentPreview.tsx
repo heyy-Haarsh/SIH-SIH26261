@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/services/api'
+import { PdfEvidenceViewer, type EvidenceBBox } from './PdfEvidenceViewer'
 
 interface Props {
   role: string
@@ -10,6 +11,11 @@ interface Props {
   fileName: string
   /** Changes when a new version is uploaded so the preview reloads. */
   version: number
+  /** Fetch exactly this stored version (older versions stay viewable) instead of the current one. */
+  pinVersion?: boolean
+  highlightPage?: number | null
+  highlightBBox?: EvidenceBBox | null
+  highlightLabel?: string | null
 }
 
 type State =
@@ -20,7 +26,17 @@ type State =
   | { kind: 'other'; url: string }
 
 /** In-page preview. The file endpoint needs auth headers, so the bytes are fetched as a Blob. */
-export function DocumentPreview({ role, documentId, mimeType, fileName, version }: Props) {
+export function DocumentPreview({
+  role,
+  documentId,
+  mimeType,
+  fileName,
+  version,
+  pinVersion,
+  highlightPage,
+  highlightBBox,
+  highlightLabel,
+}: Props) {
   const [state, setState] = useState<State>({ kind: 'loading' })
 
   useEffect(() => {
@@ -28,7 +44,7 @@ export function DocumentPreview({ role, documentId, mimeType, fileName, version 
     let objectUrl: string | null = null
     setState({ kind: 'loading' })
     api
-      .fetchDocumentFile(role, documentId)
+      .fetchDocumentFile(role, documentId, pinVersion ? version : undefined)
       .then(async ({ blob }) => {
         if (cancelled) return
         objectUrl = URL.createObjectURL(blob)
@@ -50,7 +66,7 @@ export function DocumentPreview({ role, documentId, mimeType, fileName, version 
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [role, documentId, mimeType, version])
+  }, [role, documentId, mimeType, version, pinVersion])
 
   if (state.kind === 'loading') {
     return <div className="p-6 text-center text-xs text-ink-muted">Loading preview…</div>
@@ -65,10 +81,12 @@ export function DocumentPreview({ role, documentId, mimeType, fileName, version 
   return (
     <div className="space-y-2">
       {state.kind === 'pdf' && (
-        <iframe
-          title={`Preview of ${fileName}`}
-          src={state.url}
-          className="h-[480px] w-full rounded border border-border bg-white"
+        <PdfEvidenceViewer
+          url={state.url}
+          fileName={fileName}
+          highlightPage={highlightPage}
+          highlightBBox={highlightBBox}
+          highlightLabel={highlightLabel}
         />
       )}
       {state.kind === 'image' && (
